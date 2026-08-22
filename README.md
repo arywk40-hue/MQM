@@ -26,7 +26,7 @@
 
 ### Web Development & Computer Vision (Web-D + CV)
 
-**Team Members:** Curio, Agam, Saiprasanth, Ariyan
+**Team Members:** Curio, Agam, Saiprasanth, Ariyan, Ishan
 
 - **Computer Vision Pipeline:** Implement and optimize the YOLOv8 object detection inference on the central server for accurate headcount, seat occupancy, and queue length estimation.
 
