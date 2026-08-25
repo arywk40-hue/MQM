@@ -1,0 +1,64 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment / secrets
+.env
+.env.*
+*.local
+
+# Model weights & large binaries. Fetched via tools/fetch_weights.py, never committed.
+models/
+*.pt
+*.pth
+*.onnx
+*.engine
+*.weights
+
+# Generated detection outputs (data/samples/ inputs ARE tracked).
+# Contents ignored rather than the directory, so .gitkeep survives.
+data/outputs/*
+!data/outputs/.gitkeep
+
+# Logs & runtime artifacts
+*.log
+runs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Docs / large PDFs (uncomment if you don't want to track these)
+# *.pdf
+
+
+# Raw drops from teammates, staged before promotion into the package.
+# See docs/INTEGRATION.md.
+incoming/*
+!incoming/.gitkeep
+
+# Legacy prototype folder, superseded by the inference/ package.
+Human_detection/

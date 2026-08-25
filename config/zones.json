@@ -1,0 +1,51 @@
+{
+  "_comment": [
+    "Zone definitions per camera. PLACEHOLDER GEOMETRY — the polygons below were",
+    "traced against Human_detection/b.jpg (a found stock image) purely so the zone",
+    "layer has something to run against. They are throwaway. Once a frame from the",
+    "real mounted camera exists, retrace every polygon against it and bump",
+    "frame_width/frame_height to match. Do not tune anything against these numbers.",
+    "",
+    "frame_width/frame_height are the ORIGINAL-IMAGE pixel dimensions the polygons",
+    "were traced against. inference/model.py returns bboxes in original-image space",
+    "(ultralytics rescales box.xyxy back from imgsz), so these must match the camera's",
+    "capture resolution. If they don't, zones.py raises rather than silently scoring",
+    "every point-in-polygon as false."
+  ],
+  "cameras": {
+    "mess_main": {
+      "frame_width": 736,
+      "frame_height": 490,
+      "zones": [
+        {
+          "name": "queue",
+          "type": "queue",
+          "polygon": [[286, 148], [430, 143], [446, 196], [281, 200]]
+        },
+        {
+          "name": "seating_front",
+          "type": "seating",
+          "seats": 24,
+          "polygon": [[24, 275], [736, 270], [736, 490], [24, 490]]
+        },
+        {
+          "name": "seating_mid",
+          "type": "seating",
+          "seats": 40,
+          "polygon": [[110, 210], [736, 205], [736, 262], [110, 268]]
+        },
+        {
+          "name": "entrance",
+          "type": "entrance",
+          "polygon": [[0, 160], [96, 158], [100, 232], [0, 240]]
+        }
+      ],
+      "crowd_thresholds": {
+        "_comment": "Headcount bands. green < amber <= x < red <= x. PLACEHOLDER — real mess capacity is unknown and these are calibrated against whatever the detector reports, not ground truth. Re-tune once real footage + a settled model exist.",
+        "amber": 25,
+        "red": 50
+      },
+      "min_confidence": 0.25
+    }
+  }
+}

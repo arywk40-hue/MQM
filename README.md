@@ -63,3 +63,100 @@
 - **Thermal & Mounting:** Ensure the enclosure allows for passive cooling and provides the correct mounting angles for optimal camera Field of View (FOV).
 
 - **Physical Deployment:** Securely mount the 2 sensing units at the identified vantage points in the mess hall.
+
+---
+
+# Development
+
+## Setup
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+The zone and metrics layer has no third-party dependencies and can be developed
+and tested without a working detection environment.
+
+## Layout
+
+```
+config/zones.json      camera zones, seat capacity, crowd thresholds
+inference/
+  model.py             person detection (YOLO)
+  zones.py             polygon assignment
+  metrics.py           headcount, queue, occupancy, crowd level
+api/                   ingestion + read endpoints
+dashboard/             UI
+tests/                 runs without ultralytics installed
+tools/
+  draw_zones.py        render zone polygons over a frame
+  benchmarks/          evaluation scripts, not deployed
+data/samples/          committed test images
+data/outputs/          generated artefacts (ignored)
+models/                .pt weights (ignored, ~200 MB)
+docs/                  reviews and integration workflow
+incoming/              staging for handovers (ignored)
+```
+
+## Common commands
+
+Run the tests:
+
+```bash
+python tests/test_zones_metrics.py
+```
+
+Detect people in an image:
+
+```bash
+python -m inference.model data/samples/mess_hall_dense.jpg
+```
+
+Check zone polygons against a frame:
+
+```bash
+python tools/draw_zones.py data/samples/mess_hall_dense.jpg mess_main
+```
+
+Benchmark model and resolution choices:
+
+```bash
+python tools/benchmarks/resolution_sweep.py data/samples/mess_hall_dense.jpg
+```
+
+## Interfaces
+
+`inference/model.py` returns:
+
+```python
+[{"bbox": [x1, y1, x2, y2], "confidence": 0.87}, ...]
+```
+
+Corner coordinates in original-image pixel space; empty list when nothing is
+detected. Zone polygons in `config/zones.json` must be traced in that same
+space — `zones.py` raises on a mismatch rather than silently reporting zero.
+
+`inference/metrics.py` returns `headcount`, `queue_count`, `seats_total`,
+`seats_occupied`, `seat_occupancy_pct`, `crowd_level`, `zone_counts`,
+`detections_raw`, `detections_counted`. The API's pydantic models and the
+dashboard both consume these keys directly.
+
+## Documentation
+
+- `docs/INTEGRATION.md` — how a handover from a teammate enters the tracked codebase
+- `docs/reviews/` — review history and measured results
+- `docs/reviews/2026-08-25-model-selection.md` — benchmark data behind the model choice
+
+## Open decisions
+
+**Camera capture resolution is unspecified.** Benchmarking shows a 5.4x swing in
+detections driven purely by pixels-per-subject, which capture resolution caps.
+This is currently the highest-leverage open decision and belongs with the RPi
+capture scripts.
+
+**Zone geometry is placeholder.** The polygons in `config/zones.json` were traced
+against a stock image so the layer has something to run against. They must be
+retraced once a frame from the mounted camera exists.
+
+**Dashboard framework.** This proposal specifies React/Next.js; current task
+allocation specifies Streamlit. Worth reconciling before work starts.

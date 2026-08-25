@@ -1,0 +1,23 @@
+# Production runtime.
+#
+# The zone and metrics layer (inference/zones.py, inference/metrics.py) has no
+# third-party dependencies and tests without any of these installed. Only the
+# detector and the API need them.
+
+# --- Detection ---
+ultralytics>=8.4,<9
+torch>=2.10
+torchvision>=0.28
+opencv-python>=4.10
+
+# --- API ---
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+influxdb-client>=1.47
+redis>=5.2
+python-dotenv>=1.0
+
+# --- Dashboard ---
+streamlit>=1.40
+plotly>=5.24
