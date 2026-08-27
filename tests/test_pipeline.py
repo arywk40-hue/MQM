@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+from io import BytesIO
+from pathlib import Path
+
+import pytest
+from PIL import Image
+
+from inference.pipeline import InvalidImageError, decode_jpeg, process_frame
+from inference.zones import ZoneConfigError
+from tests import fixtures as fx
+
+ROOT = Path(__file__).resolve().parent.parent
+DENSE = ROOT / "data" / "samples" / "mess_hall_dense.jpg"
+ALT = ROOT / "data" / "samples" / "mess_hall_alt.jpg"
+
+
+def test_real_jpeg_to_metrics_pipeline_with_injected_detector():
+    seen = {}
+
+    def detector(image):
+        seen["shape"] = image.shape
+        return fx.BUSY
+
+    metrics = process_frame(DENSE.read_bytes(), "mess_main", detector=detector)
+    assert seen["shape"] == (490, 736, 3)
+    assert metrics["camera_id"] == "mess_main"
+    assert metrics["headcount"] == 12
+    assert metrics["queue_count"] == 3
+    assert metrics["seats_occupied"] == 8
+
+
+def test_empty_detection_result_is_a_real_empty_reading():
+    metrics = process_frame(DENSE.read_bytes(), "mess_main", detector=lambda _: [])
+    assert metrics["headcount"] == 0
+    assert metrics["detections_raw"] == 0
+
+
+def test_corrupt_jpeg_is_rejected():
+    with pytest.raises(InvalidImageError, match="JPEG"):
+        decode_jpeg(b"not an image")
+
+
+def test_non_jpeg_bytes_are_rejected_even_if_decodable():
+    output = BytesIO()
+    Image.new("RGB", (10, 10)).save(output, format="PNG")
+    with pytest.raises(InvalidImageError, match="expected JPEG"):
+        decode_jpeg(output.getvalue())
+
+
+def test_jpeg_is_converted_to_opencv_bgr_order():
+    output = BytesIO()
+    Image.new("RGB", (8, 8), (255, 0, 0)).save(output, format="JPEG", quality=100)
+    image, size = decode_jpeg(output.getvalue())
+    assert size == (8, 8)
+    assert image[0, 0, 0] < 5  # blue channel
+    assert image[0, 0, 2] > 250  # red channel
+
+
+def test_frame_coordinate_mismatch_is_rejected():
+    with pytest.raises(ZoneConfigError, match="different coordinate spaces"):
+        process_frame(ALT.read_bytes(), "mess_main", detector=lambda _: [])

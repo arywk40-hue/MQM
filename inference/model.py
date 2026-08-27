@@ -43,9 +43,11 @@ Output contract (do not change without telling Curio + the ingestion API):
 
 from __future__ import annotations
 
+import os
+import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union
+from typing import Any, cast
 
 import numpy as np
 from ultralytics import YOLO
@@ -60,15 +62,15 @@ PERSON_CLASS_ID = 0
 # IoU threshold so NMS doesn't merge two overlapping people into one box.
 
 DEFAULT_CONFIDENCE_THRESHOLD = 0.25  # min detection confidence to keep
-                                      # (tuned against real mess-hall test photo:
-                                      # 0.4 missed distant/occluded people in dense
-                                      # background rows; 0.25 is a middle ground.
-                                      # Re-tune once real mounted-camera footage
-                                      # comes in — angle/distance/lighting will differ.)
-DEFAULT_IOU_THRESHOLD = 0.5          # NMS overlap threshold (lower = less
-                                      # aggressive merging of overlapping boxes)
-DEFAULT_IMAGE_SIZE = 1280            # inference resolution; higher helps
-                                      # small/occluded people in crowds
+# (tuned against real mess-hall test photo:
+# 0.4 missed distant/occluded people in dense
+# background rows; 0.25 is a middle ground.
+# Re-tune once real mounted-camera footage
+# comes in — angle/distance/lighting will differ.)
+DEFAULT_IOU_THRESHOLD = 0.5  # NMS overlap threshold (lower = less
+# aggressive merging of overlapping boxes)
+DEFAULT_IMAGE_SIZE = 1280  # inference resolution; higher helps
+# small/occluded people in crowds
 DEFAULT_MODEL_WEIGHTS = "yolov8n.pt"
 
 # Weights live in models/ at the repo root, kept out of version control by
@@ -89,7 +91,7 @@ def resolve_weights(weights: str | Path) -> str:
 
 @dataclass
 class Detection:
-    bbox: list[float]      # [x1, y1, x2, y2]
+    bbox: list[float]  # [x1, y1, x2, y2]
     confidence: float
 
     def to_dict(self) -> dict:
@@ -110,14 +112,21 @@ class PersonDetector:
         iou_threshold: float = DEFAULT_IOU_THRESHOLD,
         image_size: int = DEFAULT_IMAGE_SIZE,
     ):
+        if not 0 <= confidence_threshold <= 1:
+            raise ValueError("confidence_threshold must be between 0 and 1")
+        if not 0 <= iou_threshold <= 1:
+            raise ValueError("iou_threshold must be between 0 and 1")
+        if image_size <= 0:
+            raise ValueError("image_size must be greater than zero")
         self.model = YOLO(resolve_weights(weights_path))
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
         self.image_size = image_size
+        self._predict_lock = threading.Lock()
 
     def detect_people(
         self,
-        image: Union[str, Path, np.ndarray],
+        image: str | Path | np.ndarray,
         confidence_threshold: float | None = None,
         iou_threshold: float | None = None,
         image_size: int | None = None,
@@ -140,22 +149,30 @@ class PersonDetector:
             List of {"bbox": [x1, y1, x2, y2], "confidence": float},
             one entry per detected person, sorted by confidence descending.
         """
-        conf = confidence_threshold if confidence_threshold is not None else self.confidence_threshold
+        conf = (
+            confidence_threshold if confidence_threshold is not None else self.confidence_threshold
+        )
         iou = iou_threshold if iou_threshold is not None else self.iou_threshold
         imgsz = image_size if image_size is not None else self.image_size
 
-        results = self.model.predict(
-            source=image,
-            conf=conf,
-            iou=iou,
-            imgsz=imgsz,
-            augment=augment,
-            classes=[PERSON_CLASS_ID],  # filter to person at inference time
-            verbose=False,
-        )
+        # Ultralytics mutates predictor state; serialize calls on the shared
+        # singleton so concurrent camera uploads cannot corrupt one another.
+        with self._predict_lock:
+            results = self.model.predict(
+                source=image,
+                conf=conf,
+                iou=iou,
+                imgsz=imgsz,
+                augment=augment,
+                classes=[PERSON_CLASS_ID],  # filter to person at inference time
+                verbose=False,
+            )
 
         detections: list[Detection] = []
-        for result in results:
+        for raw_result in results:
+            # Ultralytics covers several task families with a Results | Tensor
+            # return type; this person-detection model returns Results at runtime.
+            result = cast(Any, raw_result)
             if result.boxes is None:
                 continue
             for box in result.boxes:
@@ -177,16 +194,33 @@ class PersonDetector:
 # without managing model lifecycle itself.
 
 _default_detector: PersonDetector | None = None
+_default_detector_lock = threading.Lock()
 
 
 def get_detector() -> PersonDetector:
     global _default_detector
-    if _default_detector is None:
-        _default_detector = PersonDetector()
+    if _default_detector is not None:
+        return _default_detector
+    with _default_detector_lock:
+        if _default_detector is None:
+            try:
+                confidence = float(os.environ.get("MODEL_CONFIDENCE", DEFAULT_CONFIDENCE_THRESHOLD))
+                iou = float(os.environ.get("MODEL_IOU", DEFAULT_IOU_THRESHOLD))
+                image_size = int(os.environ.get("MODEL_IMAGE_SIZE", DEFAULT_IMAGE_SIZE))
+            except ValueError as exc:
+                raise ValueError(
+                    "MODEL_CONFIDENCE, MODEL_IOU, and MODEL_IMAGE_SIZE must be numeric"
+                ) from exc
+            _default_detector = PersonDetector(
+                weights_path=os.environ.get("MODEL_WEIGHTS", DEFAULT_MODEL_WEIGHTS),
+                confidence_threshold=confidence,
+                iou_threshold=iou,
+                image_size=image_size,
+            )
     return _default_detector
 
 
-def detect_people(image: Union[str, Path, np.ndarray], **kwargs) -> list[dict]:
+def detect_people(image: str | Path | np.ndarray, **kwargs) -> list[dict]:
     """Convenience wrapper around the default PersonDetector instance."""
     return get_detector().detect_people(image, **kwargs)
 
