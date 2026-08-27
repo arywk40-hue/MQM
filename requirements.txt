@@ -17,6 +17,8 @@ pydantic>=2.9
 influxdb-client>=1.47
 redis>=5.2
 python-dotenv>=1.0
+python-multipart>=0.0.9
+pillow>=10.4
 
 # --- Dashboard ---
 streamlit>=1.40
