@@ -19,6 +19,8 @@ ENV/
 .env
 .env.*
 *.local
+!.env.example
+!.streamlit/secrets.toml.example
 
 # Model weights & large binaries. Fetched via tools/fetch_weights.py, never committed.
 models/
@@ -50,6 +52,9 @@ htmlcov/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local dashboard secrets (the example remains tracked above).
+.streamlit/secrets.toml
 
 # Docs / large PDFs (uncomment if you don't want to track these)
 # *.pdf
