@@ -35,12 +35,13 @@ dashboard.
 
 from __future__ import annotations
 
-from typing import Iterable, Literal
+from collections.abc import Iterable
+from typing import Literal
 
 from .zones import (
+    DEFAULT_REFERENCE_POINT,
     CameraZones,
     ReferencePoint,
-    DEFAULT_REFERENCE_POINT,
     ZoneAssignment,
     assign_zones,
     count_by_zone,
@@ -71,8 +72,7 @@ def crowd_level(headcount: int, thresholds: dict[str, int] | None = None) -> Cro
 
     if amber > red:
         raise ValueError(
-            f"crowd thresholds out of order: amber={amber} > red={red}. "
-            f"Check config/zones.json."
+            f"crowd thresholds out of order: amber={amber} > red={red}. Check config/zones.json."
         )
 
     if headcount >= red:
@@ -116,21 +116,21 @@ def metrics_from_assignments(
     zone_counts = count_by_zone(assignments, config)
 
     headcount = len(assignments)
-    queue_count = sum(
-        zone_counts[z.name] for z in config.zones_of_type("queue")
-    )
+    queue_count = sum(zone_counts[z.name] for z in config.zones_of_type("queue"))
 
     seats_total = config.total_seats
     # Clamped to capacity. Detection noise can otherwise report more occupants
     # than seats, surfacing as an occupancy figure above 100% on the dashboard.
-    seats_occupied = min(
-        sum(zone_counts[z.name] for z in config.zones_of_type("seating")),
-        seats_total,
-    ) if seats_total else 0
-
-    seat_occupancy_pct = (
-        round(100.0 * seats_occupied / seats_total, 1) if seats_total else 0.0
+    seats_occupied = (
+        min(
+            sum(zone_counts[z.name] for z in config.zones_of_type("seating")),
+            seats_total,
+        )
+        if seats_total
+        else 0
     )
+
+    seat_occupancy_pct = round(100.0 * seats_occupied / seats_total, 1) if seats_total else 0.0
 
     return {
         "camera_id": config.camera_id,

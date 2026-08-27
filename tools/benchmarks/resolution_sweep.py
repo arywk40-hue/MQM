@@ -42,16 +42,24 @@ TIMED_RUNS = 3
 def measure(model, image_path: str, imgsz: int) -> tuple[int, float]:
     """Detection count and median wall-clock seconds, excluding warmup."""
     model.predict(
-        image_path, conf=DEFAULT_CONFIDENCE_THRESHOLD, iou=DEFAULT_IOU_THRESHOLD,
-        imgsz=imgsz, classes=[0], verbose=False,
+        image_path,
+        conf=DEFAULT_CONFIDENCE_THRESHOLD,
+        iou=DEFAULT_IOU_THRESHOLD,
+        imgsz=imgsz,
+        classes=[0],
+        verbose=False,
     )
 
     timings, results = [], None
     for _ in range(TIMED_RUNS):
         start = time.perf_counter()
         results = model.predict(
-            image_path, conf=DEFAULT_CONFIDENCE_THRESHOLD, iou=DEFAULT_IOU_THRESHOLD,
-            imgsz=imgsz, classes=[0], verbose=False,
+            image_path,
+            conf=DEFAULT_CONFIDENCE_THRESHOLD,
+            iou=DEFAULT_IOU_THRESHOLD,
+            imgsz=imgsz,
+            classes=[0],
+            verbose=False,
         )
         timings.append(time.perf_counter() - start)
 
@@ -73,11 +81,14 @@ def main() -> int:
     sizes = [int(s) for s in args.sizes.split(",") if s.strip()]
 
     from PIL import Image
+
     with Image.open(args.image) as im:
         src_w, src_h = im.size
     print(f"source: {args.image}  {src_w}x{src_h}")
-    print(f"conf={DEFAULT_CONFIDENCE_THRESHOLD}  iou={DEFAULT_IOU_THRESHOLD}  "
-          f"median of {TIMED_RUNS} timed runs after warmup\n")
+    print(
+        f"conf={DEFAULT_CONFIDENCE_THRESHOLD}  iou={DEFAULT_IOU_THRESHOLD}  "
+        f"median of {TIMED_RUNS} timed runs after warmup\n"
+    )
 
     rows: list[dict] = []
     for weights in models:
@@ -85,17 +96,26 @@ def main() -> int:
         for imgsz in sizes:
             count, secs = measure(model, args.image, imgsz)
             upscale = imgsz / max(src_w, src_h)
-            rows.append({
-                "model": weights, "imgsz": imgsz, "count": count,
-                "seconds": round(secs, 3), "upscale_factor": round(upscale, 2),
-            })
+            rows.append(
+                {
+                    "model": weights,
+                    "imgsz": imgsz,
+                    "count": count,
+                    "seconds": round(secs, 3),
+                    "upscale_factor": round(upscale, 2),
+                }
+            )
             print(f"  {weights:<14} {imgsz:>5}  {count:>3} detected  {secs:6.2f}s")
 
             if args.save_annotated:
                 OUT_DIR.mkdir(parents=True, exist_ok=True)
                 res = model.predict(
-                    args.image, conf=DEFAULT_CONFIDENCE_THRESHOLD,
-                    iou=DEFAULT_IOU_THRESHOLD, imgsz=imgsz, classes=[0], verbose=False,
+                    args.image,
+                    conf=DEFAULT_CONFIDENCE_THRESHOLD,
+                    iou=DEFAULT_IOU_THRESHOLD,
+                    imgsz=imgsz,
+                    classes=[0],
+                    verbose=False,
                 )
                 stem = Path(weights).stem
                 Image.fromarray(res[0].plot()[:, :, ::-1]).save(
@@ -150,13 +170,17 @@ def _report_plateau(rows: list[dict], models: list[str]) -> None:
         # native input size rather than saturating, and reporting that as a
         # plateau would recommend exactly the wrong resolution.
         if peak > 0 and last["count"] < peak * 0.6:
-            print(f"  {m}: DEGRADES beyond {peak_at} — peak {peak}, "
-                  f"down to {last['count']} at {last['imgsz']}. Not resolution-"
-                  f"scalable; evaluate only at {peak_at}.")
+            print(
+                f"  {m}: DEGRADES beyond {peak_at} — peak {peak}, "
+                f"down to {last['count']} at {last['imgsz']}. Not resolution-"
+                f"scalable; evaluate only at {peak_at}."
+            )
         elif delta > 0:
-            print(f"  {m}: still climbing at {last['imgsz']} "
-                  f"(+{delta} from {prev['imgsz']}). True optimum is higher; "
-                  f"extend the sweep or raise capture resolution.")
+            print(
+                f"  {m}: still climbing at {last['imgsz']} "
+                f"(+{delta} from {prev['imgsz']}). True optimum is higher; "
+                f"extend the sweep or raise capture resolution."
+            )
         else:
             print(f"  {m}: plateaued by {last['imgsz']} ({delta:+d}), peak {peak} at {peak_at}.")
 

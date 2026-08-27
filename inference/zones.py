@@ -24,9 +24,10 @@ rejects frames of a different size unless rescaling is requested explicitly.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Literal, Sequence
+from typing import Literal
 
 Point = tuple[float, float]
 Polygon = Sequence[Point]
@@ -59,9 +60,9 @@ class ZoneConfigError(ValueError):
 @dataclass(frozen=True)
 class Zone:
     name: str
-    type: str                     # "queue" | "seating" | "entrance" | ...
+    type: str  # "queue" | "seating" | "entrance" | ...
     polygon: tuple[Point, ...]
-    seats: int | None = None      # only meaningful for type == "seating"
+    seats: int | None = None  # only meaningful for type == "seating"
 
     def contains(self, point: Point) -> bool:
         return point_in_polygon(point, self.polygon)
@@ -187,9 +188,7 @@ def load_zones(
 
         polygon = [tuple(p) for p in entry.get("polygon", [])]
         if len(polygon) < 3:
-            raise ZoneConfigError(
-                f"zone {name!r} needs at least 3 points, got {len(polygon)}"
-            )
+            raise ZoneConfigError(f"zone {name!r} needs at least 3 points, got {len(polygon)}")
 
         zone_type = entry.get("type", "other")
         seats = entry.get("seats")
@@ -199,9 +198,7 @@ def load_zones(
                 f"meaningless without a denominator, and the camera cannot count chairs"
             )
 
-        zones.append(
-            Zone(name=name, type=zone_type, polygon=tuple(polygon), seats=seats)
-        )
+        zones.append(Zone(name=name, type=zone_type, polygon=tuple(polygon), seats=seats))
 
     config = CameraZones(
         camera_id=camera_id,
@@ -209,8 +206,7 @@ def load_zones(
         frame_height=int(cam["frame_height"]),
         zones=tuple(zones),
         crowd_thresholds={
-            k: v for k, v in cam.get("crowd_thresholds", {}).items()
-            if not k.startswith("_")
+            k: v for k, v in cam.get("crowd_thresholds", {}).items() if not k.startswith("_")
         },
         min_confidence=float(cam.get("min_confidence", 0.0)),
     )
@@ -250,10 +246,8 @@ def find_zone_overlaps(config: CameraZones) -> list[tuple[str, str]]:
     """
     overlaps: list[tuple[str, str]] = []
     for i, a in enumerate(config.zones):
-        for b in config.zones[i + 1:]:
-            if any(b.contains(p) for p in a.polygon) or any(
-                a.contains(p) for p in b.polygon
-            ):
+        for b in config.zones[i + 1 :]:
+            if any(b.contains(p) for p in a.polygon) or any(a.contains(p) for p in b.polygon):
                 overlaps.append((a.name, b.name))
     return overlaps
 

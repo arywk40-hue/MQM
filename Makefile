@@ -1,0 +1,27 @@
+.PHONY: install test lint typecheck format-check dev services services-down
+
+install:
+	python3 -m venv .venv
+	.venv/bin/python -m pip install --upgrade pip
+	.venv/bin/python -m pip install -r requirements-dev.txt
+
+test:
+	.venv/bin/python -m pytest -q
+
+lint:
+	.venv/bin/ruff check api dashboard inference tests tools
+
+typecheck:
+	.venv/bin/mypy
+
+format-check:
+	.venv/bin/ruff format --check api dashboard inference tests tools
+
+services:
+	docker compose up -d --wait
+
+services-down:
+	docker compose down
+
+dev:
+	./scripts/dev.sh
