@@ -20,7 +20,7 @@
 
 **Central Processing (Server):** Receives images and runs YOLOv8 object detection inference to estimate crowd metrics and queue length. Data is stored in a Time-Series Database (e.g., InfluxDB).
 
-**User Interface:** A Web Dashboard (React/Next.js) fetching data via REST APIs from the central server.
+**User Interface:** A read-only Streamlit dashboard fetching data only through the Read API.
 
 ## 3. Team Allotment & Responsibilities
 
@@ -68,95 +68,145 @@
 
 # Development
 
-## Setup
+## Working architecture
 
-```bash
-python -m pip install -r requirements.txt
+```text
+Pi camera -- authenticated JPEG POST --> FastAPI ingestion router
+  --> YOLOv8 person detection --> configured zone assignment --> metrics
+  --> InfluxDB (timestamped history)
+  --> Redis (latest reading with an expiry)
+
+Streamlit dashboard --> FastAPI read router
+  --> Redis for current/offline state
+  --> InfluxDB for the last-hour trend
 ```
 
-The zone and metrics layer has no third-party dependencies and can be developed
-and tested without a working detection environment.
+The dashboard never connects to Redis or InfluxDB. Ingestion returns success
+only after both stores accept the reading; storage and inference failures are
+returned explicitly instead of being hidden behind generated data.
+
+## Local setup and startup
+
+Requirements: Python 3.11+, Docker Desktop/Engine with Compose, and `curl`.
+
+```bash
+make install
+cp .env.example .env
+```
+
+Edit `.env` and replace both `change-me` values. `CAMERA_API_KEY` authenticates
+camera uploads; `INFLUX_TOKEN` and `INFLUX_INIT_PASSWORD` initialize the local
+InfluxDB container. Do not commit `.env`.
+
+Start the complete application:
+
+```bash
+make dev
+```
+
+This waits for Redis and InfluxDB, starts the API at
+`http://127.0.0.1:8000` and Streamlit at `http://127.0.0.1:8501`, and stops the
+two application processes on Ctrl-C. Run `make services-down` when the local
+database containers are no longer needed.
+
+Ultralytics downloads `yolov8n.pt` on first use. To avoid that download, place
+the weight at `models/yolov8n.pt`; model weights are intentionally ignored by
+Git.
+
+## Exercise the real flow
+
+With `make dev` running, send the committed 736x490 sample that matches the
+current zone coordinate space:
+
+```bash
+set -a; source .env; set +a
+curl --fail --request POST http://127.0.0.1:8000/ingest/mess_main \
+  --header "X-Camera-Key: $CAMERA_API_KEY" \
+  --form "file=@data/samples/mess_hall_dense.jpg;type=image/jpeg"
+curl --fail http://127.0.0.1:8000/status
+curl --fail http://127.0.0.1:8000/status/mess_main
+curl --fail "http://127.0.0.1:8000/history/mess_main?minutes=60"
+```
+
+`GET /health` is process liveness. `GET /ready` checks Redis and InfluxDB and
+returns HTTP 503 until both are available. Interactive API documentation is at
+`/docs`.
+
+## API contract
+
+- `POST /ingest/{camera_id}` accepts only a multipart JPEG and requires the
+  `X-Camera-Key` header. It rejects unknown cameras, corrupt files, coordinate
+  mismatches, oversized uploads, and unavailable dependencies.
+- `GET /status` reports every configured camera, including an explicit
+  `online: false` state when its Redis TTL expires.
+- `GET /status/{camera_id}` returns one current status.
+- `GET /history/{camera_id}?minutes=60` returns 1-1440 minutes of timestamped
+  history from InfluxDB.
+
+The stable metric fields are `camera_id`, `timestamp`, `headcount`,
+`queue_count`, `seats_total`, `seats_occupied`, `seat_occupancy_pct`,
+`crowd_level`, `zone_counts`, `detections_raw`, and `detections_counted`.
+
+## Configuration
+
+| Variable | Purpose |
+|---|---|
+| `CAMERA_API_KEY` | Shared secret required only for camera ingestion |
+| `KNOWN_CAMERAS` | Comma-separated IDs that must also exist in `config/zones.json` |
+| `REDIS_URL` | Redis/Upstash connection URL (`rediss://` is supported) |
+| `LATEST_TTL_SECONDS` | How long a camera remains online without a new frame |
+| `INFLUX_URL`, `INFLUX_TOKEN` | InfluxDB 2.x/Cloud endpoint and token |
+| `INFLUX_ORG`, `INFLUX_BUCKET` | InfluxDB write/query destination |
+| `READ_API_BASE_URL` | API URL used by Streamlit; set in Streamlit Cloud secrets in production |
+| `CORS_ALLOW_ORIGINS` | Comma-separated browser origins, never wildcarded by default |
+| `MODEL_*` | Optional weights, confidence, IoU, and image-size overrides |
+
+For production, replace the local Redis URL with the managed Upstash URL and
+the Influx values with the Cloud values. Put backend values in Render/Railway
+environment settings and `READ_API_BASE_URL` in Streamlit Cloud secrets. Never
+put service credentials in Streamlit: the dashboard only needs the public Read
+API URL.
+
+## Quality commands
+
+```bash
+make test
+make lint
+make typecheck
+make format-check
+python tools/draw_zones.py data/samples/mess_hall_dense.jpg mess_main
+python tools/benchmarks/resolution_sweep.py data/samples/mess_hall_dense.jpg
+python tools/load_test.py --url http://127.0.0.1:8000/status --requests 1000 --concurrency 100
+```
+
+Set `RUN_LIVE_STACK=1` and `CAMERA_API_KEY` to run the opt-in test against a
+running real stack: `pytest tests/test_live_stack.py -q`.
 
 ## Layout
 
-```
-config/zones.json      camera zones, seat capacity, crowd thresholds
-inference/
-  model.py             person detection (YOLO)
-  zones.py             polygon assignment
-  metrics.py           headcount, queue, occupancy, crowd level
-api/                   ingestion + read endpoints
-dashboard/             UI
-tests/                 runs without ultralytics installed
-tools/
-  draw_zones.py        render zone polygons over a frame
-  benchmarks/          evaluation scripts, not deployed
-data/samples/          committed test images
-data/outputs/          generated artefacts (ignored)
-models/                .pt weights (ignored, ~200 MB)
-docs/                  reviews and integration workflow
-incoming/              staging for handovers (ignored)
+```text
+api/                    FastAPI app, auth, schemas, read/ingestion routers, storage adapters
+dashboard/              read-only Streamlit UI and HTTP client
+inference/              JPEG pipeline, YOLO detector, zones, and metrics
+config/zones.json       per-camera geometry, capacity, thresholds
+tests/                  unit, API, pipeline, dashboard, and opt-in live-stack tests
+tools/                  zone drawing, load test, and non-production benchmarks
+docker-compose.yml      local Redis + InfluxDB only
+data/samples/           committed input images
+data/outputs/           ignored generated artifacts
+models/                 ignored model weights
+docs/                   specification, reviews, and integration workflow
 ```
 
-## Common commands
+## Known external calibration blockers
 
-Run the tests:
+- The current `mess_main` zone geometry was traced against the committed stock
+  736x490 image. It must be retraced from a real mounted-camera frame before
+  deployment; the API deliberately rejects a different resolution.
+- Camera capture resolution is still unspecified. Existing benchmarks show it
+  materially changes recall and the best inference size.
+- Seat occupancy remains the documented person-in-seating-zone heuristic, not
+  a trained chair-occupancy classifier.
 
-```bash
-python tests/test_zones_metrics.py
-```
-
-Detect people in an image:
-
-```bash
-python -m inference.model data/samples/mess_hall_dense.jpg
-```
-
-Check zone polygons against a frame:
-
-```bash
-python tools/draw_zones.py data/samples/mess_hall_dense.jpg mess_main
-```
-
-Benchmark model and resolution choices:
-
-```bash
-python tools/benchmarks/resolution_sweep.py data/samples/mess_hall_dense.jpg
-```
-
-## Interfaces
-
-`inference/model.py` returns:
-
-```python
-[{"bbox": [x1, y1, x2, y2], "confidence": 0.87}, ...]
-```
-
-Corner coordinates in original-image pixel space; empty list when nothing is
-detected. Zone polygons in `config/zones.json` must be traced in that same
-space — `zones.py` raises on a mismatch rather than silently reporting zero.
-
-`inference/metrics.py` returns `headcount`, `queue_count`, `seats_total`,
-`seats_occupied`, `seat_occupancy_pct`, `crowd_level`, `zone_counts`,
-`detections_raw`, `detections_counted`. The API's pydantic models and the
-dashboard both consume these keys directly.
-
-## Documentation
-
-- `docs/INTEGRATION.md` — how a handover from a teammate enters the tracked codebase
-- `docs/reviews/` — review history and measured results
-- `docs/reviews/2026-08-25-model-selection.md` — benchmark data behind the model choice
-
-## Open decisions
-
-**Camera capture resolution is unspecified.** Benchmarking shows a 5.4x swing in
-detections driven purely by pixels-per-subject, which capture resolution caps.
-This is currently the highest-leverage open decision and belongs with the RPi
-capture scripts.
-
-**Zone geometry is placeholder.** The polygons in `config/zones.json` were traced
-against a stock image so the layer has something to run against. They must be
-retraced once a frame from the mounted camera exists.
-
-**Dashboard framework.** This proposal specifies React/Next.js; current task
-allocation specifies Streamlit. Worth reconciling before work starts.
+See `docs/INTEGRATION.md` for handovers and `docs/reviews/` for model-selection
+evidence and unresolved real-camera validation work.

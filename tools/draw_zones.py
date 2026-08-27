@@ -52,9 +52,7 @@ def main() -> int:
         print("Pillow required: pip install pillow")
         return 1
 
-    config_path = args.config or (
-        Path(__file__).resolve().parent.parent / "config" / "zones.json"
-    )
+    config_path = args.config or (Path(__file__).resolve().parent.parent / "config" / "zones.json")
     config = load_zones(args.camera_id, config_path)
 
     img = Image.open(args.image).convert("RGBA")

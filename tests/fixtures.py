@@ -52,13 +52,17 @@ SEATED_ONLY = [
 ]
 
 # Lunch rush: queue + both seating bands + entrance
-BUSY = QUEUE_ONLY + SEATED_ONLY + [
-    person_at(120, 230, height=45),   # seating_mid
-    person_at(300, 240, height=45),   # seating_mid
-    person_at(480, 235, height=45),   # seating_mid
-    person_at(600, 225, height=45),   # seating_mid
-    person_at(50, 220, height=50),    # entrance
-]
+BUSY = (
+    QUEUE_ONLY
+    + SEATED_ONLY
+    + [
+        person_at(120, 230, height=45),  # seating_mid
+        person_at(300, 240, height=45),  # seating_mid
+        person_at(480, 235, height=45),  # seating_mid
+        person_at(600, 225, height=45),  # seating_mid
+        person_at(50, 220, height=50),  # entrance
+    ]
+)
 
 # Below the 0.25 min_confidence floor in config/zones.json — should be dropped
 LOW_CONFIDENCE = [

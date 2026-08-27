@@ -21,6 +21,7 @@ enough to certify accuracy.
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from inference.model import detect_people  # noqa: E402
@@ -30,16 +31,16 @@ from inference.model import detect_people  # noqa: E402
 # height. Adjust band boundaries to match where "near/mid/far" actually
 # falls in your specific camera angle.
 BAND_BOUNDARIES = {
-    "near": (0.66, 1.0),   # bottom third of frame = closest to camera
+    "near": (0.66, 1.0),  # bottom third of frame = closest to camera
     "mid": (0.33, 0.66),
-    "far": (0.0, 0.33),    # top third = farthest from camera
+    "far": (0.0, 0.33),  # top third = farthest from camera
 }
 
 # TODO: hand-count people in each band of your test image and fill in.
 GROUND_TRUTH_COUNTS = {
     "near": None,  # e.g. 12
-    "mid": None,   # e.g. 20
-    "far": None,   # e.g. 35
+    "mid": None,  # e.g. 20
+    "far": None,  # e.g. 35
 }
 
 

@@ -25,8 +25,8 @@ Usage:
 """
 
 import sys
-from pathlib import Path
 import time
+from pathlib import Path
 
 import cv2
 from ultralytics import YOLO
@@ -45,14 +45,17 @@ IOU_THRESHOLD = DEFAULT_IOU_THRESHOLD
 IMAGE_SIZE = DEFAULT_IMAGE_SIZE
 
 
-def run_model(weights: str, image_path: str, name: str, imgsz: int = IMAGE_SIZE, augment: bool = False):
+def run_model(
+    weights: str, image_path: str, name: str, imgsz: int = IMAGE_SIZE, augment: bool = False
+):
     model = YOLO(resolve_weights(weights))
 
     # Warm up: first predict() pays graph init / lazy alloc. Production runs a
     # warm singleton via get_detector(), so timing a cold call overstates real
     # per-frame cost. Discard the first run, then time the median of 3.
-    model.predict(image_path, conf=CONF_THRESHOLD, imgsz=imgsz, augment=augment,
-                  classes=[0], verbose=False)
+    model.predict(
+        image_path, conf=CONF_THRESHOLD, imgsz=imgsz, augment=augment, classes=[0], verbose=False
+    )
 
     timings = []
     for _ in range(3):
@@ -144,7 +147,10 @@ if __name__ == "__main__":
 
     image_path = sys.argv[1]
 
-    print(f"Running all models at imgsz={IMAGE_SIZE}, conf={CONF_THRESHOLD} (matches model.py defaults)\n")
+    print(
+        f"Running all models at imgsz={IMAGE_SIZE}, conf={CONF_THRESHOLD} "
+        "(matches model.py defaults)\n"
+    )
 
     # 1. YOLOv8n — current default in model.py
     run_model("yolov8n.pt", image_path, "YOLOv8n")

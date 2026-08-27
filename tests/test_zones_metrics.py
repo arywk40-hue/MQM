@@ -15,6 +15,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from inference.metrics import (  # noqa: E402
+    compute_metrics,
+    crowd_level,
+    empty_metrics,
+)
 from inference.zones import (  # noqa: E402
     CameraZones,
     Zone,
@@ -25,11 +30,6 @@ from inference.zones import (  # noqa: E402
     point_in_polygon,
     reference_point,
     rescale,
-)
-from inference.metrics import (  # noqa: E402
-    compute_metrics,
-    crowd_level,
-    empty_metrics,
 )
 from tests import fixtures as fx  # noqa: E402
 
@@ -94,13 +94,16 @@ def test_reference_point_choice_changes_zone():
     whose feet fall inside a zone but whose torso centre sits above its upper
     edge is assigned differently under each mode.
     """
-    zone = Zone(name="strip", type="seating", polygon=((0, 100), (100, 100), (100, 200), (0, 200)), seats=4)
+    zone = Zone(
+        name="strip", type="seating", polygon=((0, 100), (100, 100), (100, 200), (0, 200)), seats=4
+    )
     bbox = [40, 20, 60, 150]  # feet at y=150 (inside), centroid at y=85 (outside)
     assert zone.contains(reference_point(bbox, "bottom_center"))
     assert not zone.contains(reference_point(bbox, "centroid"))
 
 
 # --- Config loading ----------------------------------------------------
+
 
 def test_load_zones():
     c = cfg()
@@ -121,13 +124,15 @@ def test_load_zones_unknown_camera():
 
 
 def test_seating_zone_requires_seat_count(tmp_path=None):
-    import json, tempfile
+    import json
+    import tempfile
+
     bad = {
         "cameras": {
             "x": {
-                "frame_width": 100, "frame_height": 100,
-                "zones": [{"name": "s", "type": "seating",
-                           "polygon": [[0, 0], [10, 0], [10, 10]]}],
+                "frame_width": 100,
+                "frame_height": 100,
+                "zones": [{"name": "s", "type": "seating", "polygon": [[0, 0], [10, 0], [10, 10]]}],
             }
         }
     }
@@ -145,13 +150,17 @@ def test_seating_zone_requires_seat_count(tmp_path=None):
 
 
 def test_polygon_outside_declared_frame_is_rejected():
-    import json, tempfile
+    import json
+    import tempfile
+
     bad = {
         "cameras": {
             "x": {
-                "frame_width": 100, "frame_height": 100,
-                "zones": [{"name": "q", "type": "queue",
-                           "polygon": [[0, 0], [1920, 0], [1920, 1080]]}],
+                "frame_width": 100,
+                "frame_height": 100,
+                "zones": [
+                    {"name": "q", "type": "queue", "polygon": [[0, 0], [1920, 0], [1920, 1080]]}
+                ],
             }
         }
     }
@@ -169,6 +178,7 @@ def test_polygon_outside_declared_frame_is_rejected():
 
 
 # --- The silent-zero failure mode --------------------------------------
+
 
 def test_frame_size_mismatch_raises_rather_than_reading_zero():
     """
@@ -190,8 +200,7 @@ def test_rescale_same_aspect_ratio_preserves_membership():
     assert doubled.frame_size == (1472, 980)
 
     scaled_dets = [
-        {"bbox": [v * 2 for v in d["bbox"]], "confidence": d["confidence"]}
-        for d in fx.QUEUE_ONLY
+        {"bbox": [v * 2 for v in d["bbox"]], "confidence": d["confidence"]} for d in fx.QUEUE_ONLY
     ]
     before = compute_metrics(fx.QUEUE_ONLY, c, frame_size=FRAME)
     after = compute_metrics(scaled_dets, doubled, frame_size=(1472, 980))
@@ -208,6 +217,7 @@ def test_rescale_rejects_aspect_ratio_change():
 
 
 # --- Assignment --------------------------------------------------------
+
 
 def test_empty_detections_yield_zeroes_not_errors():
     m = compute_metrics(fx.EMPTY, cfg(), frame_size=FRAME)
@@ -247,18 +257,22 @@ def test_shipped_config_has_no_counting_zone_overlap():
     entrance/seating intersection is reported as seated.
     """
     import warnings
+
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         load_zones(CAMERA, CONFIG)
-    assert not [w for w in caught if "overlap" in str(w.message)], \
-        [str(w.message) for w in caught]
+    assert not [w for w in caught if "overlap" in str(w.message)], [str(w.message) for w in caught]
 
 
 def test_overlap_detection_fires_on_overlapping_counting_zones():
     import warnings
+
     from inference.zones import _warn_on_counting_zone_overlap
+
     c = CameraZones(
-        camera_id="t", frame_width=100, frame_height=100,
+        camera_id="t",
+        frame_width=100,
+        frame_height=100,
         zones=(
             Zone("seats", "seating", ((0, 0), (60, 0), (60, 60), (0, 60)), seats=4),
             Zone("door", "entrance", ((40, 40), (100, 40), (100, 100), (40, 100))),
@@ -273,7 +287,9 @@ def test_overlap_detection_fires_on_overlapping_counting_zones():
 
 def test_overlapping_zones_record_all_matches():
     c = CameraZones(
-        camera_id="t", frame_width=100, frame_height=100,
+        camera_id="t",
+        frame_width=100,
+        frame_height=100,
         zones=(
             Zone("a", "queue", ((0, 0), (60, 0), (60, 60), (0, 60))),
             Zone("b", "entrance", ((40, 40), (100, 40), (100, 100), (40, 100))),
@@ -286,11 +302,12 @@ def test_overlapping_zones_record_all_matches():
 
 # --- Metrics -----------------------------------------------------------
 
+
 def test_queue_and_seating_split():
     m = compute_metrics(fx.BUSY, cfg(), frame_size=FRAME)
     assert m["headcount"] == 12
     assert m["queue_count"] == 3
-    assert m["seats_occupied"] == 8   # 4 front + 4 mid
+    assert m["seats_occupied"] == 8  # 4 front + 4 mid
     assert m["seats_total"] == 64
 
 
@@ -303,7 +320,9 @@ def test_seat_occupancy_percentage():
 def test_seat_occupancy_clamped_at_capacity():
     """Detection noise must not surface as occupancy above 100%."""
     c = CameraZones(
-        camera_id="t", frame_width=100, frame_height=100,
+        camera_id="t",
+        frame_width=100,
+        frame_height=100,
         zones=(Zone("s", "seating", ((0, 0), (100, 0), (100, 100), (0, 100)), seats=2),),
         crowd_thresholds={"amber": 10, "red": 20},
     )
@@ -318,9 +337,9 @@ def test_crowd_level_bands():
     t = {"amber": 25, "red": 50}
     assert crowd_level(0, t) == "green"
     assert crowd_level(24, t) == "green"
-    assert crowd_level(25, t) == "amber"   # boundary is inclusive
+    assert crowd_level(25, t) == "amber"  # boundary is inclusive
     assert crowd_level(49, t) == "amber"
-    assert crowd_level(50, t) == "red"     # boundary is inclusive
+    assert crowd_level(50, t) == "red"  # boundary is inclusive
     assert crowd_level(500, t) == "red"
 
 
@@ -336,9 +355,16 @@ def test_crowd_level_rejects_inverted_thresholds():
 def test_metrics_schema_is_stable():
     """Ingestion and dashboard consume these keys directly."""
     expected = {
-        "camera_id", "headcount", "queue_count", "seats_total", "seats_occupied",
-        "seat_occupancy_pct", "crowd_level", "zone_counts",
-        "detections_raw", "detections_counted",
+        "camera_id",
+        "headcount",
+        "queue_count",
+        "seats_total",
+        "seats_occupied",
+        "seat_occupancy_pct",
+        "crowd_level",
+        "zone_counts",
+        "detections_raw",
+        "detections_counted",
     }
     assert set(compute_metrics(fx.BUSY, cfg(), frame_size=FRAME)) == expected
     assert set(empty_metrics(cfg())) == expected
@@ -347,14 +373,14 @@ def test_metrics_schema_is_stable():
 def test_metrics_are_json_serialisable():
     """Output is persisted to InfluxDB and Redis and returned via the read API."""
     import json
+
     json.dumps(compute_metrics(fx.BUSY, cfg(), frame_size=FRAME))
 
 
 # --- Bare runner (no pytest required) ----------------------------------
 
 if __name__ == "__main__":
-    tests = [(n, o) for n, o in sorted(globals().items())
-             if n.startswith("test_") and callable(o)]
+    tests = [(n, o) for n, o in sorted(globals().items()) if n.startswith("test_") and callable(o)]
     failed = []
     for name, fn in tests:
         try:
