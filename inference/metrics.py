@@ -111,24 +111,33 @@ def metrics_from_assignments(
     assignments: list[ZoneAssignment],
     config: CameraZones,
     detections_raw: int | None = None,
+    queue_flags: Iterable[bool] | None = None,
+    seated_flags: Iterable[bool] | None = None,
 ) -> dict:
-    """Build the metrics dict from already-computed zone assignments."""
+    """Build metrics from zone assignments, optionally refined by classifiers."""
     zone_counts = count_by_zone(assignments, config)
 
+    def refined_count(zone_type: str, flags: Iterable[bool] | None) -> int:
+        if flags is None:
+            return sum(zone_counts[zone.name] for zone in config.zones_of_type(zone_type))
+        values = list(flags)
+        if len(values) != len(assignments):
+            raise ValueError(
+                f"{zone_type} classifier returned {len(values)} predictions for "
+                f"{len(assignments)} zone assignments"
+            )
+        return sum(
+            is_positive and assignment.in_zone_type(zone_type, config)
+            for assignment, is_positive in zip(assignments, values, strict=True)
+        )
+
     headcount = len(assignments)
-    queue_count = sum(zone_counts[z.name] for z in config.zones_of_type("queue"))
+    queue_count = refined_count("queue", queue_flags)
 
     seats_total = config.total_seats
     # Clamped to capacity. Detection noise can otherwise report more occupants
     # than seats, surfacing as an occupancy figure above 100% on the dashboard.
-    seats_occupied = (
-        min(
-            sum(zone_counts[z.name] for z in config.zones_of_type("seating")),
-            seats_total,
-        )
-        if seats_total
-        else 0
-    )
+    seats_occupied = min(refined_count("seating", seated_flags), seats_total) if seats_total else 0
 
     seat_occupancy_pct = round(100.0 * seats_occupied / seats_total, 1) if seats_total else 0.0
 

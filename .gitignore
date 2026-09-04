@@ -22,13 +22,16 @@ ENV/
 !.env.example
 !.streamlit/secrets.toml.example
 
-# Model weights & large binaries. Fetched via tools/fetch_weights.py, never committed.
-models/
+# Model weights & large binaries. The reviewed attribute classifiers are the
+# only exceptions; standard YOLO weights are downloaded on demand.
+models/*
 *.pt
 *.pth
 *.onnx
 *.engine
 *.weights
+!models/queue_classifier.pt
+!models/seated_classifier.pt
 
 # Generated detection outputs (data/samples/ inputs ARE tracked).
 # Contents ignored rather than the directory, so .gitkeep survives.
@@ -67,3 +70,7 @@ incoming/*
 
 # Legacy prototype folder, superseded by the inference/ package.
 Human_detection/
+
+# Training handover: raw crops and source photos stay local. The reviewed
+# production checkpoints are promoted into models/ above.
+content/

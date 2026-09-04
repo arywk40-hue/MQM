@@ -85,6 +85,11 @@ The dashboard never connects to Redis or InfluxDB. Ingestion returns success
 only after both stores accept the reading; storage and inference failures are
 returned explicitly instead of being hidden behind generated data.
 
+Queue and seated counts combine two signals: camera-specific zones decide
+where a detected person is, then the reviewed MobileNetV2 crop classifiers
+refine whether a person in a queue zone is queued and whether a person in a
+seating zone is seated. Headcount remains the YOLO person-detection count.
+
 ## Local setup and startup
 
 Requirements: Python 3.11+, Docker Desktop/Engine with Compose, and `curl`.
@@ -110,8 +115,11 @@ two application processes on Ctrl-C. Run `make services-down` when the local
 database containers are no longer needed.
 
 Ultralytics downloads `yolov8n.pt` on first use. To avoid that download, place
-the weight at `models/yolov8n.pt`; model weights are intentionally ignored by
-Git.
+the weight at `models/yolov8n.pt`; the standard YOLO weight remains ignored by
+Git. The reviewed `models/queue_classifier.pt` and
+`models/seated_classifier.pt` are tracked and refine queue/seating estimates
+from detected person crops. Set `ATTRIBUTE_CLASSIFIERS_ENABLED=false` only for
+diagnosis or while retraining.
 
 ## Exercise the real flow
 
@@ -159,7 +167,9 @@ The stable metric fields are `camera_id`, `timestamp`, `headcount`,
 | `INFLUX_ORG`, `INFLUX_BUCKET` | InfluxDB write/query destination |
 | `READ_API_BASE_URL` | API URL used by Streamlit; set in Streamlit Cloud secrets in production |
 | `CORS_ALLOW_ORIGINS` | Comma-separated browser origins, never wildcarded by default |
-| `MODEL_*` | Optional weights, confidence, IoU, and image-size overrides |
+| `MODEL_*` | Optional YOLO weights, confidence, IoU, and image-size overrides |
+| `ATTRIBUTE_CLASSIFIERS_ENABLED` | Enables the reviewed crop classifiers for queue and seated estimates |
+| `QUEUE_CLASSIFIER_WEIGHTS`, `SEATED_CLASSIFIER_WEIGHTS` | Reviewed MobileNetV2 classifier paths, resolved under `models/` |
 
 For production, replace the local Redis URL with the managed Upstash URL and
 the Influx values with the Cloud values. Put backend values in Render/Railway
@@ -194,7 +204,7 @@ tools/                  zone drawing, load test, and non-production benchmarks
 docker-compose.yml      local Redis + InfluxDB only
 data/samples/           committed input images
 data/outputs/           ignored generated artifacts
-models/                 ignored model weights
+models/                 YOLO download cache plus reviewed queue/seated classifiers
 docs/                   specification, reviews, and integration workflow
 ```
 

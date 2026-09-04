@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from inference.classifiers import PersonAttributes
 from inference.pipeline import InvalidImageError, decode_jpeg, process_frame
 from inference.zones import ZoneConfigError
 from tests import fixtures as fx
@@ -34,6 +35,30 @@ def test_empty_detection_result_is_a_real_empty_reading():
     metrics = process_frame(DENSE.read_bytes(), "mess_main", detector=lambda _: [])
     assert metrics["headcount"] == 0
     assert metrics["detections_raw"] == 0
+
+
+def test_attribute_classifiers_refine_only_the_relevant_spatial_zones():
+    def classifier(_image, assignments):
+        assert len(assignments) == len(fx.BUSY)
+        return [
+            PersonAttributes(
+                is_queue=False,
+                is_seated=False,
+                queue_confidence=0.99,
+                seated_confidence=0.99,
+            )
+            for _ in assignments
+        ]
+
+    metrics = process_frame(
+        DENSE.read_bytes(),
+        "mess_main",
+        detector=lambda _: fx.BUSY,
+        attribute_classifier=classifier,
+    )
+    assert metrics["headcount"] == 12
+    assert metrics["queue_count"] == 0
+    assert metrics["seats_occupied"] == 0
 
 
 def test_corrupt_jpeg_is_rejected():

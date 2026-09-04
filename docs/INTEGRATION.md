@@ -22,7 +22,7 @@ MQM/
 ├── data/
 │   ├── samples/                committed test images
 │   └── outputs/                generated artefacts (ignored)
-├── models/                     .pt weights (ignored, ~200 MB)
+├── models/                     YOLO cache plus reviewed production classifiers
 ├── docs/reviews/               review history
 └── incoming/                   staging for handovers (ignored)
 ```
@@ -119,8 +119,12 @@ The reviews already in `docs/reviews/` follow this pattern.
 
 ## Weights
 
-Not in version control. `models/` is ignored, and `*.pt` is ignored globally as
-a backstop.
+Standard detector weights are not in version control. `models/yolov8n.pt` is
+ignored and downloaded by Ultralytics if absent. The two reviewed, small
+production attribute classifiers are the deliberate exception:
+`models/queue_classifier.pt` and `models/seated_classifier.pt` are tracked.
+Raw crops, source photos, and training datasets are not production assets and
+remain ignored under `content/`.
 
 Ultralytics downloads standard weights on first use, so a fresh clone works
 without any manual step. `inference.model.resolve_weights()` checks `models/`

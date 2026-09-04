@@ -38,7 +38,7 @@ if ! curl --silent --fail http://127.0.0.1:8000/health >/dev/null; then
   exit 1
 fi
 
-.venv/bin/streamlit run dashboard/app.py --server.address 127.0.0.1 --server.port 8501 &
+PYTHONPATH="$repo_root" .venv/bin/streamlit run dashboard/app.py --server.address 127.0.0.1 --server.port 8501 &
 dashboard_pid=$!
 
 echo "API:       http://127.0.0.1:8000/docs"
