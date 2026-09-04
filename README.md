@@ -1,222 +1,239 @@
-# Mess Queue Management System - Core Team Proposal
+# Mess Queue Management
 
-## 1. Project Overview & Objectives
+Mess Queue Management is a camera-based congestion-monitoring system for a college mess. Raspberry Pi cameras upload JPEG frames; the server detects people, estimates queue and seating use, stores live and historical metrics, and serves a read-only Streamlit dashboard.
 
-**Project Duration:** Mid-August through September
+This README documents the implemented software, not only the original project proposal. Status is current as of 4 September 2026.
 
-**Goal:** Address the lack of real-time visibility into mess congestion and reduce peak-hour overcrowding.
+## What is working
 
-**Solution:** A live dashboard displaying real-time queue size, seat occupancy, headcount, and crowd level to enable students to make informed dining decisions.
+- Authenticated camera-frame ingestion with FastAPI.
+- Real YOLOv8 person detection in original frame coordinates.
+- Camera-specific polygon zones for queue, seating, and entrance regions.
+- Reviewed MobileNetV2 classifiers that refine queue and seated counts from detected person crops.
+- Redis latest-reading cache with camera TTL/offline state.
+- InfluxDB time-series history for charts.
+- Read-only Streamlit dashboard with current metrics and a 60-minute trend.
+- Docker Compose local storage, reproducible commands, API tests, classifier tests, dashboard tests, and an opt-in real-stack test.
 
-**Scope:** Deployment of two (2) sensing units to cover the full mess area.(though we will start with 1 initially)
+## System architecture
 
-## 2. System Architecture
+\`\`\`text
+Raspberry Pi camera
+  │ authenticated JPEG POST
+  ▼
+FastAPI ingestion API
+  ├─ OpenCV JPEG decoding and frame-size validation
+  ├─ YOLOv8 person detection
+  ├─ queue/seating/entrance zone assignment
+  ├─ MobileNetV2 queue + seated crop classifiers
+  ├─ InfluxDB: durable timestamped history
+  └─ Redis: latest reading with expiry
 
-**Edge Sensors (Perception Layer):** 2x Raspberry Pi Zero boards paired with Pi Camera modules. These will capture high-quality snapshots periodically (e.g., every 10 seconds).
+Streamlit dashboard
+  ├─ GET /status       → current online/offline state
+  └─ GET /history/{id} → recent time-series trend
+\`\`\`
 
-**Enclosure & Power:** Housed in custom 3D-printed enclosures and powered via standard USB adapters, with power-backup considerations.
+The dashboard never receives database credentials or connects directly to Redis/InfluxDB. Ingestion succeeds only after both storage writes succeed; inference and storage failures are returned explicitly.
 
-- **Data Transmission:** Snapshots are transmitted over the IIT Mandi Campus Wi-Fi to a central server with low latency.
+## Software delivered
 
-**Central Processing (Server):** Receives images and runs YOLOv8 object detection inference to estimate crowd metrics and queue length. Data is stored in a Time-Series Database (e.g., InfluxDB).
+### Computer vision and metrics
 
-**User Interface:** A read-only Streamlit dashboard fetching data only through the Read API.
+- inference/model.py loads YOLOv8 and returns COCO person detections only.
+- inference/pipeline.py decodes JPEG bytes, validates camera coordinate space, and runs the full inference-to-metrics path.
+- inference/zones.py maps person floor points to configured polygons and rejects incompatible frame dimensions instead of producing false zeroes.
+- inference/metrics.py produces headcount, queue count, occupied seats, occupancy percentage, crowd level, per-zone counts, and detection totals.
+- inference/classifiers.py safely loads two reviewed tensor-only MobileNetV2 state dictionaries and classifies YOLO person crops in a batch.
 
-## 3. Team Allotment & Responsibilities
+Queue classification applies only to people already in a queue zone. Seated classification applies only to people in a seating zone. This combines visual posture/context with the physical layout rather than allowing a classifier to invent a queue or seat anywhere in the frame.
 
-### Web Development & Computer Vision (Web-D + CV)
+### Backend and storage
 
-**Team Members:** Curio, Agam, Saiprasanth, Ariyan, Ishan
+- POST /ingest/{camera_id} accepts authenticated multipart JPEG frames.
+- X-Camera-Key authentication, upload-size checks, JPEG validation, unknown-camera rejection, and strict Pydantic metric invariants are enforced.
+- Redis stores expiring current snapshots; offline cameras return online: false rather than fake zero values.
+- InfluxDB stores complete readings and returns sorted historical metrics.
+- GET /status, GET /status/{camera_id}, and GET /history/{camera_id} are read-only endpoints.
+- /health is process liveness; /ready checks Redis and InfluxDB and returns HTTP 503 until both are available.
 
-- **Computer Vision Pipeline:** Implement and optimize the YOLOv8 object detection inference on the central server for accurate headcount, seat occupancy, and queue length estimation.
+### Dashboard
 
-- **Backend Server:** Set up the API Gateway (FastAPI/Node.js) and Time-Series Database (InfluxDB) to receive and log data from the Pi units.
+- dashboard/app.py provides a read-only Streamlit dashboard.
+- It refreshes current state every eight seconds and shows headcount, queue, seats, occupancy, crowd level, timestamp, and a trend chart.
+- It renders explicit offline, configuration, API-error, and no-history states instead of using mock readings.
 
-- **Web Dashboard:** Develop the frontend (React/Next.js) to provide a seamless, live UI for students to check mess congestion.
+### Operations and quality tooling
 
-### RPi Power Management (BMS, Backup)
+- docker-compose.yml runs Redis and InfluxDB locally.
+- scripts/dev.sh starts storage, FastAPI, and Streamlit together.
+- Makefile supplies install, test, lint, type-check, format-check, and storage lifecycle commands.
+- .env.example and .streamlit/secrets.toml.example document required variables without committing real credentials.
+- tools/load_test.py provides concurrent endpoint load testing.
 
-#### **Team Member:** Ritisha
+## Pull-request history
 
-- **Power Delivery System:** Manage the deployment of standard USB adapters for the sensing units.
+| PR | Status | Delivered work |
+| --- | --- | --- |
+| [#1](https://github.com/the-robotronics-club/MQM/pull/1) | Closed | Initial infrastructure proposal; superseded by the integrated implementation. |
+| [#2](https://github.com/the-robotronics-club/MQM/pull/2) | Merged | Real JPEG-to-YOLO-to-zone metrics pipeline and regression tests. |
+| [#3](https://github.com/the-robotronics-club/MQM/pull/3) | Merged | Authenticated API, Redis current state, Influx history, readiness checks, and API tests. |
+| [#4](https://github.com/the-robotronics-club/MQM/pull/4) | Merged | Read-only Streamlit dashboard, API client, current metrics, trend chart, and dashboard tests. |
+| [#5](https://github.com/the-robotronics-club/MQM/pull/5) | Merged | Developer workflow, quality tooling, load test, Compose validation, and implementation documentation. |
+| [#6](https://github.com/the-robotronics-club/MQM/pull/6) | Open | Queue/seated MobileNetV2 classifier integration, reviewed weights, configuration, provenance note, and focused tests. |
 
-- **Backup & BMS:** Design and integrate a Battery Management System (BMS) or UPS backup to ensure continuous operation during short power fluctuations and enable safe shutdowns.
+## Local setup
 
-- **Power Optimization:** Monitor and validate the thermal and power draw of the edge units running 24/7.(see what we can do about thermal power dissipation though not that imp for now)
+Requirements: Python 3.11+, Docker Desktop/Engine with Compose, and curl.
 
-### RPi OS & Programming
-
-#### **Team Member:** Kartik (Lead)
-
-- **System Configuration:** Flash and configure the Raspberry Pi Zero OS for headless, stable operation on the campus Wi-Fi network.
-
-- **Capture & Transmission Scripts:** Write lightweight Python scripts utilizing `libcamera` to wake up, capture JPEGs, and reliably publish them via HTTP POST or MQTT to the central server every 10 seconds.
-
-- **Edge Reliability:** Implement watchdogs and auto-restart mechanisms to ensure the edge scripts recover from network drops.
-
-### Mechanical
-
-**Team Members:** Suman, Priyanka
-
-- **Enclosure Design:** CAD design and 3D print custom enclosures to house the Pi Zero, Camera, and power modules securely.
-
-- **Thermal & Mounting:** Ensure the enclosure allows for passive cooling and provides the correct mounting angles for optimal camera Field of View (FOV).
-
-- **Physical Deployment:** Securely mount the 2 sensing units at the identified vantage points in the mess hall.
-
----
-
-# Development
-
-## Working architecture
-
-```text
-Pi camera -- authenticated JPEG POST --> FastAPI ingestion router
-  --> YOLOv8 person detection --> configured zone assignment --> metrics
-  --> InfluxDB (timestamped history)
-  --> Redis (latest reading with an expiry)
-
-Streamlit dashboard --> FastAPI read router
-  --> Redis for current/offline state
-  --> InfluxDB for the last-hour trend
-```
-
-The dashboard never connects to Redis or InfluxDB. Ingestion returns success
-only after both stores accept the reading; storage and inference failures are
-returned explicitly instead of being hidden behind generated data.
-
-Queue and seated counts combine two signals: camera-specific zones decide
-where a detected person is, then the reviewed MobileNetV2 crop classifiers
-refine whether a person in a queue zone is queued and whether a person in a
-seating zone is seated. Headcount remains the YOLO person-detection count.
-
-## Local setup and startup
-
-Requirements: Python 3.11+, Docker Desktop/Engine with Compose, and `curl`.
-
-```bash
+\`\`\`bash
 make install
 cp .env.example .env
-```
+\`\`\`
 
-Edit `.env` and replace both `change-me` values. `CAMERA_API_KEY` authenticates
-camera uploads; `INFLUX_TOKEN` and `INFLUX_INIT_PASSWORD` initialize the local
-InfluxDB container. Do not commit `.env`.
+Edit .env and replace every change-me value. At minimum, set:
+
+- CAMERA_API_KEY — secret used by camera uploads.
+- INFLUX_TOKEN — local InfluxDB or production Cloud token.
+- INFLUX_INIT_PASSWORD — local InfluxDB bootstrap password.
+
+Keep the reviewed classifiers enabled unless diagnosing or retraining:
+
+\`\`\`dotenv
+ATTRIBUTE_CLASSIFIERS_ENABLED=true
+QUEUE_CLASSIFIER_WEIGHTS=queue_classifier.pt
+SEATED_CLASSIFIER_WEIGHTS=seated_classifier.pt
+\`\`\`
 
 Start the complete application:
 
-```bash
+\`\`\`bash
 make dev
-```
+\`\`\`
 
-This waits for Redis and InfluxDB, starts the API at
-`http://127.0.0.1:8000` and Streamlit at `http://127.0.0.1:8501`, and stops the
-two application processes on Ctrl-C. Run `make services-down` when the local
-database containers are no longer needed.
+- Dashboard: http://127.0.0.1:8501
+- API docs: http://127.0.0.1:8000/docs
+- Liveness: http://127.0.0.1:8000/health
+- Readiness: http://127.0.0.1:8000/ready
 
-Ultralytics downloads `yolov8n.pt` on first use. To avoid that download, place
-the weight at `models/yolov8n.pt`; the standard YOLO weight remains ignored by
-Git. The reviewed `models/queue_classifier.pt` and
-`models/seated_classifier.pt` are tracked and refine queue/seating estimates
-from detected person crops. Set `ATTRIBUTE_CLASSIFIERS_ENABLED=false` only for
-diagnosis or while retraining.
+Press Ctrl-C to stop FastAPI and Streamlit. Stop local storage when finished:
+
+\`\`\`bash
+make services-down
+\`\`\`
 
 ## Exercise the real flow
 
-With `make dev` running, send the committed 736x490 sample that matches the
-current zone coordinate space:
+With make dev running, upload the committed frame that matches the active 736×490 zone geometry:
 
-```bash
+\`\`\`bash
 set -a; source .env; set +a
+
 curl --fail --request POST http://127.0.0.1:8000/ingest/mess_main \
   --header "X-Camera-Key: $CAMERA_API_KEY" \
   --form "file=@data/samples/mess_hall_dense.jpg;type=image/jpeg"
+
 curl --fail http://127.0.0.1:8000/status
 curl --fail http://127.0.0.1:8000/status/mess_main
 curl --fail "http://127.0.0.1:8000/history/mess_main?minutes=60"
-```
+\`\`\`
 
-`GET /health` is process liveness. `GET /ready` checks Redis and InfluxDB and
-returns HTTP 503 until both are available. Interactive API documentation is at
-`/docs`.
+Expected failure behavior:
+
+- Unknown cameras return HTTP 404.
+- Missing/invalid camera keys return HTTP 401.
+- Non-JPEG, corrupt, oversized, or wrong-resolution frames are rejected.
+- Unavailable model or storage dependencies return HTTP 503.
+- A camera with no fresh Redis reading reports online: false.
 
 ## API contract
 
-- `POST /ingest/{camera_id}` accepts only a multipart JPEG and requires the
-  `X-Camera-Key` header. It rejects unknown cameras, corrupt files, coordinate
-  mismatches, oversized uploads, and unavailable dependencies.
-- `GET /status` reports every configured camera, including an explicit
-  `online: false` state when its Redis TTL expires.
-- `GET /status/{camera_id}` returns one current status.
-- `GET /history/{camera_id}?minutes=60` returns 1-1440 minutes of timestamped
-  history from InfluxDB.
+| Endpoint | Purpose |
+| --- | --- |
+| POST /ingest/{camera_id} | Authenticated multipart JPEG ingestion. |
+| GET /status | Current state for every configured camera. |
+| GET /status/{camera_id} | Current state for one camera, including offline status. |
+| GET /history/{camera_id}?minutes=60 | One to 1,440 minutes of time-series history. |
+| GET /health | Process liveness. |
+| GET /ready | Redis and InfluxDB dependency readiness. |
 
-The stable metric fields are `camera_id`, `timestamp`, `headcount`,
-`queue_count`, `seats_total`, `seats_occupied`, `seat_occupancy_pct`,
-`crowd_level`, `zone_counts`, `detections_raw`, and `detections_counted`.
+Each reading contains:
 
-## Configuration
+\`\`\`text
+camera_id, timestamp, headcount, queue_count,
+seats_total, seats_occupied, seat_occupancy_pct,
+crowd_level, zone_counts, detections_raw, detections_counted
+\`\`\`
+
+## Configuration reference
 
 | Variable | Purpose |
-|---|---|
-| `CAMERA_API_KEY` | Shared secret required only for camera ingestion |
-| `KNOWN_CAMERAS` | Comma-separated IDs that must also exist in `config/zones.json` |
-| `REDIS_URL` | Redis/Upstash connection URL (`rediss://` is supported) |
-| `LATEST_TTL_SECONDS` | How long a camera remains online without a new frame |
-| `INFLUX_URL`, `INFLUX_TOKEN` | InfluxDB 2.x/Cloud endpoint and token |
-| `INFLUX_ORG`, `INFLUX_BUCKET` | InfluxDB write/query destination |
-| `READ_API_BASE_URL` | API URL used by Streamlit; set in Streamlit Cloud secrets in production |
-| `CORS_ALLOW_ORIGINS` | Comma-separated browser origins, never wildcarded by default |
-| `MODEL_*` | Optional YOLO weights, confidence, IoU, and image-size overrides |
-| `ATTRIBUTE_CLASSIFIERS_ENABLED` | Enables the reviewed crop classifiers for queue and seated estimates |
-| `QUEUE_CLASSIFIER_WEIGHTS`, `SEATED_CLASSIFIER_WEIGHTS` | Reviewed MobileNetV2 classifier paths, resolved under `models/` |
+| --- | --- |
+| CAMERA_API_KEY | Shared secret required for camera ingestion. |
+| KNOWN_CAMERAS | Comma-separated IDs defined in config/zones.json. |
+| REDIS_URL | Local Redis or managed Upstash URL. |
+| LATEST_TTL_SECONDS | Freshness window before a camera becomes offline. |
+| INFLUX_URL, INFLUX_TOKEN | InfluxDB 2.x/Cloud connection settings. |
+| INFLUX_ORG, INFLUX_BUCKET | InfluxDB write/query destination. |
+| READ_API_BASE_URL | API URL used by Streamlit. |
+| CORS_ALLOW_ORIGINS | Allowed browser origins; no wildcard default. |
+| MODEL_* | YOLO weights, confidence, IoU, and inference-size settings. |
+| ATTRIBUTE_CLASSIFIERS_ENABLED | Enables queue/seated crop classification. |
+| QUEUE_CLASSIFIER_WEIGHTS, SEATED_CLASSIFIER_WEIGHTS | Reviewed paths under models/. |
 
-For production, replace the local Redis URL with the managed Upstash URL and
-the Influx values with the Cloud values. Put backend values in Render/Railway
-environment settings and `READ_API_BASE_URL` in Streamlit Cloud secrets. Never
-put service credentials in Streamlit: the dashboard only needs the public Read
-API URL.
+For production, put backend storage credentials in hosting environment configuration. Put only READ_API_BASE_URL in Streamlit secrets; never put Redis or InfluxDB credentials in the dashboard.
 
-## Quality commands
+## Models and training handover
 
-```bash
+- models/yolov8n.pt is the standard YOLO cache. It is ignored and can be downloaded automatically by Ultralytics.
+- models/queue_classifier.pt and models/seated_classifier.pt are reviewed production checkpoints tracked by PR #6.
+- The raw content/ training handover is ignored. It contains source photos and crop datasets not required at runtime and needs separate privacy/provenance review before publication.
+- Architecture, label mapping, hashes, and safe-load verification are in [docs/reviews/2026-09-04-attribute-classifiers.md](docs/reviews/2026-09-04-attribute-classifiers.md).
+
+## Verification commands
+
+\`\`\`bash
 make test
 make lint
 make typecheck
 make format-check
-python tools/draw_zones.py data/samples/mess_hall_dense.jpg mess_main
-python tools/benchmarks/resolution_sweep.py data/samples/mess_hall_dense.jpg
 python tools/load_test.py --url http://127.0.0.1:8000/status --requests 1000 --concurrency 100
-```
+\`\`\`
 
-Set `RUN_LIVE_STACK=1` and `CAMERA_API_KEY` to run the opt-in test against a
-running real stack: `pytest tests/test_live_stack.py -q`.
+To run the real storage/API test after starting the application:
 
-## Layout
+\`\`\`bash
+set -a; source .env; set +a
+RUN_LIVE_STACK=1 BASE_URL=http://127.0.0.1:8000 pytest tests/test_live_stack.py -q
+\`\`\`
 
-```text
-api/                    FastAPI app, auth, schemas, read/ingestion routers, storage adapters
-dashboard/              read-only Streamlit UI and HTTP client
-inference/              JPEG pipeline, YOLO detector, zones, and metrics
-config/zones.json       per-camera geometry, capacity, thresholds
-tests/                  unit, API, pipeline, dashboard, and opt-in live-stack tests
-tools/                  zone drawing, load test, and non-production benchmarks
-docker-compose.yml      local Redis + InfluxDB only
-data/samples/           committed input images
-data/outputs/           ignored generated artifacts
-models/                 YOLO download cache plus reviewed queue/seated classifiers
-docs/                   specification, reviews, and integration workflow
-```
+Latest verification for PR #6:
 
-## Known external calibration blockers
+- Full suite: **63 passed, 1 opt-in test skipped**.
+- Focused classifier/pipeline/metrics suite: **37 passed**.
+- Ruff, MyPy, formatting, compilation, shell syntax, and Compose validation: **passed**.
+- Isolated real stack with Redis, InfluxDB, FastAPI, YOLO, both classifiers, and Streamlit dashboard: **passed**.
 
-- The current `mess_main` zone geometry was traced against the committed stock
-  736x490 image. It must be retraced from a real mounted-camera frame before
-  deployment; the API deliberately rejects a different resolution.
-- Camera capture resolution is still unspecified. Existing benchmarks show it
-  materially changes recall and the best inference size.
-- Seat occupancy remains the documented person-in-seating-zone heuristic, not
-  a trained chair-occupancy classifier.
+## Repository layout
 
-See `docs/INTEGRATION.md` for handovers and `docs/reviews/` for model-selection
-evidence and unresolved real-camera validation work.
+\`\`\`text
+api/                    FastAPI routes, auth, schemas, cache, storage adapters
+dashboard/              Read-only Streamlit UI and HTTP client
+inference/              YOLO detection, crop classifiers, zones, metrics
+models/                 Reviewed classifiers and local YOLO cache
+config/zones.json       Camera geometry, capacities, crowd thresholds
+data/samples/           Committed test frames
+tests/                  Unit, API, dashboard, pipeline, and live-stack tests
+tools/                  Load test, zone drawing, evaluation utilities
+docs/                   Handover records, model reviews, implementation notes
+\`\`\`
+
+## Remaining deployment work
+
+- Retrace config/zones.json using frames from final mounted cameras. Current zones are calibrated to a 736×490 sample and deliberately reject other sizes.
+- Confirm Pi capture resolution, lens crop, mounting angle, and upload cadence.
+- Validate queue/seated classifier accuracy on held-out footage from the real mess before using estimates operationally.
+- Provision production Redis/InfluxDB credentials only in the backend host.
+- Configure the Raspberry Pi uploader to send authenticated JPEG frames at the desired interval.
+
+See [docs/INTEGRATION.md](docs/INTEGRATION.md) for handover guidance and docs/reviews/ for model/integration evidence.
