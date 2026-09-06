@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -34,18 +35,33 @@ def test_live_ingest_read_and_history():
     assert response.status_code == 200, response.text
     ingested = response.json()["metrics"]
 
-    current = requests.get(f"{base_url}/status/mess_main", timeout=10).json()
+    current_response = requests.get(f"{base_url}/status/mess_main", timeout=10)
+    assert current_response.status_code == 200, current_response.text
+    current = current_response.json()
     assert current["online"] is True
     assert current["metrics"]["timestamp"] == ingested["timestamp"]
 
     deadline = time.monotonic() + 15
-    points = []
+    matching_points = []
     while time.monotonic() < deadline:
         history = requests.get(f"{base_url}/history/mess_main?minutes=60", timeout=10)
         assert history.status_code == 200, history.text
-        points = history.json()["points"]
-        if points:
+        matching_points = [
+            point
+            for point in history.json()["points"]
+            if datetime.fromisoformat(point["timestamp"])
+            == datetime.fromisoformat(ingested["timestamp"])
+        ]
+        if matching_points:
             break
         time.sleep(1)
-    assert points
-    assert points[-1]["headcount"] == ingested["headcount"]
+    assert matching_points, "The newly ingested reading did not appear in history"
+    for field in (
+        "headcount",
+        "queue_count",
+        "seats_occupied",
+        "seats_total",
+        "seat_occupancy_pct",
+        "crowd_level",
+    ):
+        assert matching_points[0][field] == ingested[field]

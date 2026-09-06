@@ -24,7 +24,7 @@ trap cleanup EXIT INT TERM
 api_pid=$!
 
 for _ in {1..30}; do
-  if curl --silent --fail http://127.0.0.1:8000/health >/dev/null; then
+  if curl --silent --fail --max-time 5 http://127.0.0.1:8000/ready >/dev/null; then
     break
   fi
   if ! kill -0 "$api_pid" 2>/dev/null; then
@@ -33,8 +33,8 @@ for _ in {1..30}; do
   fi
   sleep 1
 done
-if ! curl --silent --fail http://127.0.0.1:8000/health >/dev/null; then
-  echo "API did not become healthy within 30 seconds." >&2
+if ! curl --silent --fail --max-time 5 http://127.0.0.1:8000/ready >/dev/null; then
+  echo "API dependencies did not become ready after 30 attempts. Check Redis/InfluxDB configuration." >&2
   exit 1
 fi
 

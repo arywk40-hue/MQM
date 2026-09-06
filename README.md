@@ -17,7 +17,7 @@ This README documents the implemented software, not only the original project pr
 
 ## System architecture
 
-\`\`\`text
+```text
 Raspberry Pi camera
   │ authenticated JPEG POST
   ▼
@@ -32,7 +32,7 @@ FastAPI ingestion API
 Streamlit dashboard
   ├─ GET /status       → current online/offline state
   └─ GET /history/{id} → recent time-series trend
-\`\`\`
+```
 
 The dashboard never receives database credentials or connects directly to Redis/InfluxDB. Ingestion succeeds only after both storage writes succeed; inference and storage failures are returned explicitly.
 
@@ -86,10 +86,10 @@ Queue classification applies only to people already in a queue zone. Seated clas
 
 Requirements: Python 3.11+, Docker Desktop/Engine with Compose, and curl.
 
-\`\`\`bash
+```bash
 make install
 cp .env.example .env
-\`\`\`
+```
 
 Edit .env and replace every change-me value. At minimum, set:
 
@@ -99,17 +99,17 @@ Edit .env and replace every change-me value. At minimum, set:
 
 Keep the reviewed classifiers enabled unless diagnosing or retraining:
 
-\`\`\`dotenv
+```dotenv
 ATTRIBUTE_CLASSIFIERS_ENABLED=true
 QUEUE_CLASSIFIER_WEIGHTS=queue_classifier.pt
 SEATED_CLASSIFIER_WEIGHTS=seated_classifier.pt
-\`\`\`
+```
 
 Start the complete application:
 
-\`\`\`bash
+```bash
 make dev
-\`\`\`
+```
 
 - Dashboard: http://127.0.0.1:8501
 - API docs: http://127.0.0.1:8000/docs
@@ -118,15 +118,15 @@ make dev
 
 Press Ctrl-C to stop FastAPI and Streamlit. Stop local storage when finished:
 
-\`\`\`bash
+```bash
 make services-down
-\`\`\`
+```
 
 ## Exercise the real flow
 
 With make dev running, upload the committed frame that matches the active 736×490 zone geometry:
 
-\`\`\`bash
+```bash
 set -a; source .env; set +a
 
 curl --fail --request POST http://127.0.0.1:8000/ingest/mess_main \
@@ -136,7 +136,7 @@ curl --fail --request POST http://127.0.0.1:8000/ingest/mess_main \
 curl --fail http://127.0.0.1:8000/status
 curl --fail http://127.0.0.1:8000/status/mess_main
 curl --fail "http://127.0.0.1:8000/history/mess_main?minutes=60"
-\`\`\`
+```
 
 Expected failure behavior:
 
@@ -159,11 +159,11 @@ Expected failure behavior:
 
 Each reading contains:
 
-\`\`\`text
+```text
 camera_id, timestamp, headcount, queue_count,
 seats_total, seats_occupied, seat_occupancy_pct,
 crowd_level, zone_counts, detections_raw, detections_counted
-\`\`\`
+```
 
 ## Configuration reference
 
@@ -192,20 +192,24 @@ For production, put backend storage credentials in hosting environment configura
 
 ## Verification commands
 
-\`\`\`bash
+```bash
 make test
 make lint
 make typecheck
 make format-check
 python tools/load_test.py --url http://127.0.0.1:8000/status --requests 1000 --concurrency 100
-\`\`\`
+```
 
-To run the real storage/API test after starting the application:
+To run the real storage/API test after starting the application, run `make test-live`
+in a second terminal. It loads credentials from `.env` and verifies that the
+newly uploaded sample reaches both current status and timestamp-matched history.
+This writes one sample reading to the configured databases.
 
-\`\`\`bash
-set -a; source .env; set +a
-RUN_LIVE_STACK=1 BASE_URL=http://127.0.0.1:8000 pytest tests/test_live_stack.py -q
-\`\`\`
+For an API running at a different URL:
+
+```bash
+BASE_URL=http://127.0.0.1:8000 make test-live
+```
 
 Latest verification for PR #6:
 
@@ -216,7 +220,7 @@ Latest verification for PR #6:
 
 ## Repository layout
 
-\`\`\`text
+```text
 api/                    FastAPI routes, auth, schemas, cache, storage adapters
 dashboard/              Read-only Streamlit UI and HTTP client
 inference/              YOLO detection, crop classifiers, zones, metrics
@@ -226,7 +230,7 @@ data/samples/           Committed test frames
 tests/                  Unit, API, dashboard, pipeline, and live-stack tests
 tools/                  Load test, zone drawing, evaluation utilities
 docs/                   Handover records, model reviews, implementation notes
-\`\`\`
+```
 
 ## Remaining deployment work
 
