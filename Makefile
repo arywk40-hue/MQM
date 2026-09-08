@@ -1,4 +1,4 @@
-.PHONY: install test lint typecheck format-check dev services services-down
+.PHONY: install test test-live lint typecheck format-check dev services services-down
 
 install:
 	python3 -m venv .venv
@@ -7,6 +7,9 @@ install:
 
 test:
 	.venv/bin/python -m pytest -q
+
+test-live:
+	RUN_LIVE_STACK=1 .venv/bin/python -m pytest tests/test_live_stack.py -q
 
 lint:
 	.venv/bin/ruff check api dashboard inference tests tools

@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 
-from .metrics import compute_metrics
-from .zones import DEFAULT_CONFIG_PATH, load_zones
+from .metrics import metrics_from_assignments
+from .zones import DEFAULT_CONFIG_PATH, ZoneAssignment, assign_zones, load_zones
+
+if TYPE_CHECKING:
+    from .classifiers import PersonAttributes
 
 Detector = Callable[[np.ndarray], list[dict]]
+AttributeClassifier = Callable[[np.ndarray, list[ZoneAssignment]], list["PersonAttributes"]]
 
 
 class InvalidImageError(ValueError):
@@ -34,6 +39,7 @@ def process_frame(
     image_bytes: bytes,
     camera_id: str,
     detector: Detector | None = None,
+    attribute_classifier: AttributeClassifier | None = None,
 ) -> dict:
     """Decode, detect, assign zones, and compute the complete metrics schema."""
     image, frame_size = decode_jpeg(image_bytes)
@@ -43,4 +49,19 @@ def process_frame(
 
         detector = detect_people
     detections = detector(image)
-    return compute_metrics(detections, config, frame_size=frame_size)
+    assignments = assign_zones(detections, config, frame_size=frame_size)
+
+    if attribute_classifier is None:
+        from .classifiers import attribute_classifiers_enabled, classify_people
+
+        if attribute_classifiers_enabled():
+            attribute_classifier = classify_people
+
+    attributes = attribute_classifier(image, assignments) if attribute_classifier else None
+    return metrics_from_assignments(
+        assignments,
+        config,
+        detections_raw=len(detections),
+        queue_flags=[attribute.is_queue for attribute in attributes] if attributes else None,
+        seated_flags=[attribute.is_seated for attribute in attributes] if attributes else None,
+    )
