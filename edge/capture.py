@@ -1,7 +1,8 @@
 import os
-import time
-import requests
 import subprocess
+import time
+
+import requests
 
 # --- Configuration ---
 CAMERA_ID = os.environ.get("CAMERA_ID", "mess_main")
@@ -60,7 +61,7 @@ def capture_and_send():
         print(f"Unexpected Error: {e}")
 
 def main():
-    print(f"Starting capture loop...")
+    print("Starting capture loop...")
     print(f"Camera ID: {CAMERA_ID}")
     print(f"Endpoint: {API_ENDPOINT}")
     
