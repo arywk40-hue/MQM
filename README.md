@@ -41,6 +41,16 @@ This README documents the implemented software, not only the original project pr
 - Read-only Streamlit dashboard with current metrics and a 60-minute trend.
 - Docker Compose local storage, reproducible commands, API tests, classifier tests, dashboard tests, and an opt-in real-stack test.
 
+## Hardware components
+
+| Component | Quantity | Purchased | Price (INR) | Link |
+| --- | --- | --- | --- | --- |
+| DFRobot MP2636 Power booster and charger module | 1 | YES | 862 | [Robocraze](https://robocraze.com/products/dfrobot-mp2636-power-booster-charger-module?variant=47362616459488&country=IN&currency=INR&utm_medium=product_sync&utm_source=google&utm_content=sag_organic&utm_campaign=sag_organic&utm_source=google&utm_medium=cpc&utm_campaign=BL+%7C+Pmax+%7C+Feed+Only+%7C+RoboCraze+%7C+Electronic+Components+%7C+31%2F05&utm_source=googleads&utm_medium=ppc&utm_campaign=21337209786&utm_content=_&utm_term=&campaignid=21337209786&adgroupid=&campaign=21337209786&gad_source=1&gad_campaignid=21343423652&gbraid=0AAAAADgHQvaLVEJeEAKHwMU3YTgQoi5BT&gclid=Cj0KCQjw--7UBhCpARIsAGJBptjohsvz7vmGAU_d2penL6hIC7rWc6sJIatZNQsmgroT2qs71N9GuFcaAhuzEALw_wcB) |
+| Raspberry Pi Camera Module 3 Wide | 1 | YES | 3088 | [Electropi](https://www.electropi.in/raspberry-pi-camera-module-3-wide) |
+| 3000mAh 3.7V Micro Lipo battery | 1 | YES | 469 | [Robu](https://robu.in/product/nova-105050-3000mah-3-7v-micro-lipo-battery-pack/?gad_source=1&gad_campaignid=17427802559&gbraid=0AAAAADvLFWfBOAxwtKoc_rB5XuRQbOHss&gclid=Cj0KCQjw--7UBhCpARIsAGJBptjysFMZOT-CO76wAV8GTk03JG791q1cWhqdjimmNx-tbqhBeZpl-JQaAqo8EALw_wcB) |
+| Raspberry Pi Zero 2 W | 1 | YES | 1599 | [Electropi](https://www.electropi.in/raspberry-pi-zero-2-w-india) |
+| Standard 5V 3A Power Supply with Micro USB Plug | 1 | YES | 249 | [Robu](https://robu.in/product/orange-5v-3a-power-supply-adapter-charger-with-micro-usb-plug/?gad_source=1&gad_campaignid=17427802559&gbraid=0AAAAADvLFWdjgjAWQUpBgB_tcSoG4QZNW&gclid=CjwKCAjwkaXUBhASEiwAZI3ds7AxVBPzPY9SKF68SyXc_KrhFeh9InSrM8iIQR74nv2zibZH_YFcJBoCRKUQAvD_BwE) |
+
 ## System architecture
 
 ```text
@@ -149,10 +159,10 @@ to the API and dashboard launched by `make dev`; other Makefile checks still use
 the repository's `.venv`. Environments under `/tmp` are temporary and may need to
 be recreated after cleanup or a restart.
 
-- Dashboard: http://127.0.0.1:8501
-- API docs: http://127.0.0.1:8000/docs
-- Liveness: http://127.0.0.1:8000/health
-- Readiness: http://127.0.0.1:8000/ready
+- Dashboard: <http://127.0.0.1:8501>
+- API docs: <http://127.0.0.1:8000/docs>
+- Liveness: <http://127.0.0.1:8000/health>
+- Readiness: <http://127.0.0.1:8000/ready>
 
 Press Ctrl-C to stop FastAPI and Streamlit. Stop local storage when finished:
 
