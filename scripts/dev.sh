@@ -24,8 +24,9 @@ trap cleanup EXIT INT TERM
 "$venv_dir/bin/python" -m uvicorn api.main:app --host 127.0.0.1 --port 8000 &
 api_pid=$!
 
+# Phase 1: wait for process to bind
 for _ in {1..30}; do
-  if curl --silent --fail --max-time 5 http://127.0.0.1:8000/ready >/dev/null; then
+  if curl --silent --fail --max-time 2 http://127.0.0.1:8000/health > /dev/null; then
     break
   fi
   if ! kill -0 "$api_pid" 2>/dev/null; then
@@ -34,8 +35,19 @@ for _ in {1..30}; do
   fi
   sleep 1
 done
-if ! curl --silent --fail --max-time 5 http://127.0.0.1:8000/ready >/dev/null; then
-  echo "API dependencies did not become ready after 30 attempts. Check Redis/InfluxDB configuration." >&2
+if ! curl --silent --fail --max-time 2 http://127.0.0.1:8000/health > /dev/null; then
+  echo "API did not start within 30 seconds." >&2
+  exit 1
+fi
+# Phase 2: confirm dependencies (Redis + InfluxDB) are connected
+for _ in {1..15}; do
+  if curl --silent --fail --max-time 5 http://127.0.0.1:8000/ready > /dev/null; then
+    break
+  fi
+  sleep 1
+done
+if ! curl --silent --fail --max-time 5 http://127.0.0.1:8000/ready > /dev/null; then
+  echo "API dependencies did not become ready. Check Redis/InfluxDB configuration." >&2
   exit 1
 fi
 
