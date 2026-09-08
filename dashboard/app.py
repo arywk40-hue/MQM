@@ -1,8 +1,12 @@
-"""Read-only Streamlit dashboard for current congestion and recent trends."""
+"""Photo analysis and live camera congestion dashboard."""
 
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
 import os
+from pathlib import Path
 
 import plotly.express as px
 import streamlit as st
@@ -14,6 +18,131 @@ from dashboard.client import DashboardAPIError, fetch_history, fetch_status
 load_dotenv()
 
 CROWD_COLOURS = {"green": "#16a34a", "amber": "#d97706", "red": "#dc2626"}
+REPO_ROOT = Path(__file__).resolve().parent.parent
+LOCAL_SAMPLE_DIR = REPO_ROOT / "data" / "samples" / "local"
+_TEST_FIXTURES = {"mess_hall_dense.jpg", "mess_hall_alt.jpg"}
+
+
+def local_sample_images() -> list[Path]:
+    """Return user-provided local images without exposing test fixtures in the UI."""
+    if not LOCAL_SAMPLE_DIR.is_dir():
+        return []
+    return sorted(
+        (
+            path
+            for path in LOCAL_SAMPLE_DIR.iterdir()
+            if path.is_file()
+            and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+            and path.name not in _TEST_FIXTURES
+        ),
+        key=lambda path: path.name.lower(),
+    )
+
+
+def render_upload() -> None:
+    from dashboard.image_analysis import analyze_photo, decode_photo
+
+    st.caption("Upload a photo to count people and see where they were detected. No camera needed.")
+    uploaded = st.file_uploader(
+        "Choose an image",
+        type=["jpg", "jpeg", "png"],
+        key="photo_upload",
+    )
+    samples = local_sample_images()
+    selected_sample = st.selectbox(
+        "Or choose a local test image",
+        options=[None, *samples],
+        format_func=lambda path: "Select a local image" if path is None else path.name,
+        help=(
+            "Images in data/samples/local are only for this machine and are not uploaded "
+            "or stored. "
+            "Uploads take priority when both are selected."
+        ),
+    )
+
+    image_data: bytes | None = uploaded.getvalue() if uploaded else None
+    image_name: str | None = uploaded.name if uploaded else None
+    if image_data is None and selected_sample is not None:
+        try:
+            image_data = selected_sample.read_bytes()
+            image_name = selected_sample.name
+        except OSError as exc:
+            st.error(f"Could not read {selected_sample.name}: {exc}")
+            return
+
+    calibrated = st.toggle(
+        "Use saved mess layout for queue and seating estimates",
+        help="Only for photos from the same viewpoint and resolution as the saved camera layout.",
+    )
+    camera_id = None
+    if calibrated:
+        from inference.zones import DEFAULT_CONFIG_PATH
+
+        cameras = json.loads(DEFAULT_CONFIG_PATH.read_text())["cameras"]
+        camera_id = st.selectbox("Saved layout", list(cameras))
+        camera = cameras[camera_id]
+        st.info(
+            f"This layout requires {camera['frame_width']} × {camera['frame_height']} pixels "
+            "and the same camera viewpoint. "
+            "Current zones and crowd thresholds are sample estimates."
+        )
+
+    if image_data is not None:
+        try:
+            preview = decode_photo(image_data)
+        except ValueError as exc:
+            st.session_state.pop("photo_result", None)
+            st.error(str(exc))
+            return
+        st.image(preview, caption=image_name, width="stretch")
+
+    analyze = st.button("Analyze image", type="primary", disabled=image_data is None)
+    selection = (hashlib.sha256(image_data).hexdigest() if image_data else None, camera_id)
+    if st.session_state.get("photo_selection") != selection:
+        st.session_state.pop("photo_result", None)
+        st.session_state["photo_selection"] = selection
+
+    if analyze and image_data is not None:
+        st.session_state.pop("photo_result", None)
+        try:
+            with st.spinner("Detecting people… The first analysis may take a little longer."):
+                analyzed_result = analyze_photo(image_data, camera_id)
+                analyzed_result["name"] = image_name
+                st.session_state["photo_result"] = analyzed_result
+        except ValueError as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error(
+                "Image analysis is unavailable. Check that the local model weights are installed."
+            )
+            logging.getLogger(__name__).exception("Photo analysis failed")
+
+    result = st.session_state.get("photo_result")
+    if result is None:
+        return
+    st.subheader(f"Analysis: {result['name']}")
+    st.metric("People detected", result["headcount"])
+    st.write(
+        f"Detected {result['headcount']} people in this "
+        f"{result['width']} × {result['height']} image. "
+        "Numbered boxes show the detections; small or hidden people may be missed."
+    )
+    metrics = result["metrics"]
+    if metrics is not None:
+        queue, seats, occupancy = st.columns(3)
+        queue.metric("Queue estimate", metrics["queue_count"])
+        seats.metric("Seats occupied", f"{metrics['seats_occupied']}/{metrics['seats_total']}")
+        occupancy.metric("Occupancy estimate", f"{metrics['seat_occupancy_pct']:.1f}%")
+        st.write(f"Crowd level using the saved sample thresholds: **{metrics['crowd_level']}**.")
+    else:
+        st.info("Queue, seating, and crowd estimates need a calibrated mess layout for this view.")
+    st.image(result["image"], caption="Detected people", width="stretch")
+    st.download_button(
+        "Download annotated image", result["image"], "people-detected.png", "image/png"
+    )
+    st.caption(
+        "Photo results stay in this session and do not expire or update live camera history."
+    )
 
 
 def api_base_url() -> str:
@@ -84,6 +213,12 @@ def render_camera(base_url: str, camera_id: str, status: dict) -> None:
 def main() -> None:
     st.set_page_config(page_title="Mess Queue", page_icon="🍽️", layout="wide")
     st.title("Mess Congestion")
+    mode = st.segmented_control(
+        "Mode", ["Upload image", "Live cameras"], default="Upload image", key="dashboard_mode"
+    )
+    if mode != "Live cameras":
+        render_upload()
+        return
     st.caption("Live camera estimates. The dashboard is read-only and refreshes every 8 seconds.")
     st_autorefresh(interval=8_000, key="mess-status-refresh")
 

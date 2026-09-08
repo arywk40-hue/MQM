@@ -3,13 +3,14 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
+venv_dir="${MQM_VENV_DIR:-$repo_root/.venv}"
 
 if [[ ! -f .env ]]; then
   echo "Missing .env. Run: cp .env.example .env, then replace every change-me value." >&2
   exit 1
 fi
-if [[ ! -x .venv/bin/python ]]; then
-  echo "Missing .venv. Run: make install" >&2
+if [[ ! -x "$venv_dir/bin/python" ]]; then
+  echo "Missing Python environment at $venv_dir. Run make install or set MQM_VENV_DIR." >&2
   exit 1
 fi
 
@@ -20,7 +21,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-.venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000 &
+"$venv_dir/bin/python" -m uvicorn api.main:app --host 127.0.0.1 --port 8000 &
 api_pid=$!
 
 for _ in {1..30}; do
@@ -38,7 +39,7 @@ if ! curl --silent --fail --max-time 5 http://127.0.0.1:8000/ready >/dev/null; t
   exit 1
 fi
 
-PYTHONPATH="$repo_root" .venv/bin/streamlit run dashboard/app.py --server.address 127.0.0.1 --server.port 8501 &
+PYTHONPATH="$repo_root" "$venv_dir/bin/python" -m streamlit run dashboard/app.py --server.address 127.0.0.1 --server.port 8501 &
 dashboard_pid=$!
 
 echo "API:       http://127.0.0.1:8000/docs"

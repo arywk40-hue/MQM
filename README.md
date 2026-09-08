@@ -1,6 +1,32 @@
 # Mess Queue Management
 
-Mess Queue Management is a camera-based congestion-monitoring system for a college mess. Raspberry Pi cameras upload JPEG frames; the server detects people, estimates queue and seating use, stores live and historical metrics, and serves a read-only Streamlit dashboard.
+Mess Queue Management monitors congestion in a college mess. Test it without a camera by uploading a JPEG/PNG in the Streamlit dashboard, or connect Raspberry Pi cameras for live readings and history.
+
+## Test without a camera
+
+Open the dashboard and select **Upload image** (the default view). Choose a JPEG
+or PNG up to 10 MB, or select a file that you placed in `data/samples/local/`,
+then click **Analyze image**. The result includes a person count and a
+downloadable image with numbered detection boxes. Results remain in the browser
+session without the camera TTL; uploads do not write to Redis or InfluxDB.
+
+`data/samples/local/` is intentionally ignored by Git so that personal, licensed,
+or otherwise non-redistributable test photos are never committed. Queue and
+seating estimates are only meaningful when the image matches the saved camera
+viewpoint and resolution; otherwise use the person count alone.
+
+For arbitrary photos, only person detection is reported. Enable **Use saved mess
+layout** only for the same viewpoint and resolution as a configured camera to
+obtain queue, seating, and crowd estimates. The dashboard intentionally has no
+public built-in photo sample; place photos you are allowed to use in the ignored
+local-samples folder instead. Matching resolution alone does not make a different
+photo compatible with the zones. These are estimates, not a general image-description
+service.
+
+Photo analysis runs the repository's YOLO and optional attribute classifiers in
+the dashboard process. Install the full `requirements.txt` and local model weights
+on that host; it does not need a running API or database. **Live cameras** retains
+the API-backed, read-only monitoring view.
 
 This README documents the implemented software, not only the original project proposal. Status is current as of 4 September 2026.
 
@@ -110,6 +136,18 @@ Start the complete application:
 ```bash
 make dev
 ```
+
+If the repository is in a cloud-synced Desktop folder and Python hangs while
+reading dependencies, use an environment stored on a fully local filesystem:
+
+```bash
+MQM_VENV_DIR=/absolute/path/to/local/venv make dev
+```
+
+Install `requirements-dev.txt` into that environment first. The override applies
+to the API and dashboard launched by `make dev`; other Makefile checks still use
+the repository's `.venv`. Environments under `/tmp` are temporary and may need to
+be recreated after cleanup or a restart.
 
 - Dashboard: http://127.0.0.1:8501
 - API docs: http://127.0.0.1:8000/docs

@@ -22,7 +22,22 @@ class Response:
 def run_app(monkeypatch, base_url: str, get):
     monkeypatch.setenv("READ_API_BASE_URL", base_url)
     monkeypatch.setattr(requests, "get", get)
-    return AppTest.from_file(APP).run(timeout=20)
+    app = AppTest.from_file(APP).run(timeout=20)
+    return app.segmented_control[0].set_value("Live cameras").run(timeout=20)
+
+
+def test_upload_mode_does_not_require_api(monkeypatch):
+    def fail(*args, **kwargs):
+        raise AssertionError("Photo upload must not request live camera status")
+
+    monkeypatch.setattr(requests, "get", fail)
+    app = AppTest.from_file(APP).run(timeout=20)
+    assert not app.exception
+    assert len(app.get("file_uploader")) == 1
+    assert len(app.selectbox) == 1
+    assert app.button[0].label == "Analyze image"
+    assert app.button[0].disabled
+    assert not app.error
 
 
 def test_dashboard_renders_offline_camera(monkeypatch):

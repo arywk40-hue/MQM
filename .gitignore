@@ -38,6 +38,9 @@ models/*
 data/outputs/*
 !data/outputs/.gitkeep
 
+# Developer-local photo samples for the Streamlit upload workflow.
+data/samples/local/
+
 # Logs & runtime artifacts
 *.log
 runs/
