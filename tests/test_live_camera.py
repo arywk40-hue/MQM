@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import av
 import numpy as np
 
-from dashboard.live_camera import LiveDetector
+from dashboard.live_camera import LiveDetector, PosturePrediction
 
 
 def frame():
@@ -24,12 +24,18 @@ def test_live_detection_throttles_and_preserves_video_timing(monkeypatch):
         return [{"bbox": [5, 5, 30, 40], "confidence": 0.9}]
 
     monkeypatch.setitem(sys.modules, "inference.model", SimpleNamespace(detect_people=detect))
+    monkeypatch.setattr(
+        "dashboard.live_camera.classify_postures",
+        lambda image, detections: [PosturePrediction("Sitting", 0.91)],
+    )
     monkeypatch.setattr("dashboard.live_camera.time.monotonic", lambda: 10.0)
     processor = LiveDetector()
     result = processor.recv(frame())
     processor.recv(frame())
     assert calls == [(48, 64, 3)]
     assert processor.snapshot()["headcount"] == 1
+    assert processor.snapshot()["sitting"] == 1
+    assert processor.snapshot()["standing"] == 0
     assert result.pts == 1 and result.time_base == Fraction(1, 30)
     assert result.to_ndarray(format="bgr24").any()
     processor.reset()
@@ -57,6 +63,26 @@ def test_zero_people_is_success(monkeypatch):
     processor.recv(frame())
     assert processor.snapshot()["headcount"] == 0
     assert "error" not in processor.snapshot()
+
+
+def test_posture_failure_keeps_people_count(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules,
+        "inference.model",
+        SimpleNamespace(detect_people=lambda _: [{"bbox": [5, 5, 30, 40], "confidence": 0.9}]),
+    )
+
+    def fail_posture(image, detections):
+        raise RuntimeError("unavailable")
+
+    monkeypatch.setattr("dashboard.live_camera.classify_postures", fail_posture)
+    processor = LiveDetector()
+    processor.recv(frame())
+    state = processor.snapshot()
+    assert state["headcount"] == 1
+    assert state["sitting"] == 0
+    assert state["standing"] == 0
+    assert state["posture_error"]
 
 
 def test_phone_page_requires_access_code(monkeypatch):
