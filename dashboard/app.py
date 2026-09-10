@@ -190,6 +190,26 @@ def render_camera(base_url: str, camera_id: str, status: dict) -> None:
     occupancy.metric("Occupied", f"{metrics['seat_occupancy_pct']:.1f}%")
     st.caption(f"Last update: {metrics['timestamp']}")
 
+    if metrics.get("queue_visible") is not None:
+        with st.expander("Research diagnostics"):
+            with st.container(horizontal=True):
+                st.metric("Visible queue", metrics["queue_visible"], border=True)
+                st.metric(
+                    "Occlusion correction",
+                    f"+{metrics.get('queue_hidden_estimate', 0)}",
+                    border=True,
+                )
+                if metrics.get("queue_ci_low") is not None:
+                    st.metric(
+                        "Estimated range",
+                        f"{metrics['queue_ci_low']}–{metrics['queue_ci_high']}",
+                        border=True,
+                    )
+            st.caption(
+                f"Method: {metrics.get('queue_method', 'unknown')} · "
+                f"Model: {metrics.get('queue_model_version', 'unknown')}"
+            )
+
     try:
         points = cached_history(base_url, camera_id)
     except DashboardAPIError as exc:
@@ -214,8 +234,16 @@ def main() -> None:
     st.set_page_config(page_title="Mess Queue", page_icon="🍽️", layout="wide")
     st.title("Mess Congestion")
     mode = st.segmented_control(
-        "Mode", ["Upload image", "Live cameras"], default="Upload image", key="dashboard_mode"
+        "Mode",
+        ["Upload image", "Phone camera", "Live cameras"],
+        default="Upload image",
+        key="dashboard_mode",
     )
+    if mode == "Phone camera":
+        from dashboard.live_camera import render_live_camera
+
+        render_live_camera()
+        return
     if mode != "Live cameras":
         render_upload()
         return

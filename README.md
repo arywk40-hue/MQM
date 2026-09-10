@@ -30,6 +30,44 @@ the API-backed, read-only monitoring view.
 
 This README documents the implemented software, not only the original project proposal. Status is current as of 4 September 2026.
 
+## Live phone camera on local Wi-Fi
+
+Choose **Phone camera** in the dashboard for continuous browser video and person
+detection. On a Mac, `http://localhost:8501` can request webcam permission. A phone
+needs a trusted HTTPS address; opening the Mac's plain HTTP IP address is not enough.
+
+For an iPhone and Mac on the same Wi-Fi, launch the camera-only HTTPS page:
+
+```bash
+# Use the Python environment where requirements-dev.txt is installed.
+/path/to/venv/bin/python tools/serve_phone.py --address YOUR_MAC_WIFI_IP
+```
+
+On macOS, `ipconfig getifaddr en0` usually prints the Wi-Fi address. The launcher
+prints a certificate download URL, an HTTPS URL, and a random access code.
+It binds only to that local address, with HTTPS on port 8502 and certificate
+download on port 8765. No public tunnel, STUN service, or TURN relay is configured.
+
+1. In iPhone Safari, open the printed certificate URL and allow the profile download.
+2. Install **MQM local camera test** under Settings → General → VPN & Device Management.
+3. Under Settings → General → About → Certificate Trust Settings, enable full trust
+   for **MQM local camera test**. See [Apple's certificate instructions](https://support.apple.com/en-us/102390).
+4. Open the printed HTTPS URL, enter the access code, tap **START**, and allow the camera.
+5. Use **STOP** when finished. Remove the test certificate profile after testing.
+
+The rear camera is preferred and audio is disabled. Frames are analyzed on the
+Mac up to twice per second; the returned video shows the latest analyzed frame
+with boxes. Frames and counts are not persisted to Redis/InfluxDB. This handheld
+mode reports people only; queue/seating metrics still need a calibrated fixed
+camera using the existing ingestion system. Keep Safari open and the Mac awake.
+
+The test certificate expires in seven days and is stored outside the repository;
+each launcher run creates a new certificate and access code. Stop the launcher
+with Ctrl-C. If the Wi-Fi isolates devices, local video connections may fail even
+though both devices use the same network. Physical iPhone capture and permission
+handling must be verified on the phone; automated tests cover frame processing
+and the access-code gate, not Safari's camera hardware.
+
 ## What is working
 
 - Authenticated camera-frame ingestion with FastAPI.
@@ -40,6 +78,17 @@ This README documents the implemented software, not only the original project pr
 - InfluxDB time-series history for charts.
 - Read-only Streamlit dashboard with current metrics and a 60-minute trend.
 - Docker Compose local storage, reproducible commands, API tests, classifier tests, dashboard tests, and an opt-in real-stack test.
+
+## Research queue estimator
+
+The deployed polygon + MobileNetV2 estimator remains the default `BCURRENT` baseline.
+The new `research/` package adds detector-neutral records, homography projection, a curved
+ground-plane queue path, typed features, deterministic and learned membership, bounded
+occlusion correction, session-grouped dataset tools, baseline/ablation runners, session
+bootstrap intervals, and reproducible result artifacts. Set `QUEUE_ESTIMATOR` to
+`geometric`, `membership`, or `occlusion` only after creating a validated per-camera
+calibration. See `research/README.md` and `research/PHASE_STATUS.md` for exact commands and
+the data-dependent limitations.
 
 ## System architecture
 
@@ -218,6 +267,8 @@ crowd_level, zone_counts, detections_raw, detections_counted
 | MODEL_* | YOLO weights, confidence, IoU, and inference-size settings. |
 | ATTRIBUTE_CLASSIFIERS_ENABLED | Enables queue/seated crop classification. |
 | QUEUE_CLASSIFIER_WEIGHTS, SEATED_CLASSIFIER_WEIGHTS | Reviewed paths under models/. |
+| QUEUE_ESTIMATOR | `production` (default), `geometric`, `membership`, or `occlusion`. |
+| RESEARCH_* | Optional model, spacing, uncertainty, reference-point, and correction overrides. |
 
 For production, put backend storage credentials in hosting environment configuration. Put only READ_API_BASE_URL in Streamlit secrets; never put Redis or InfluxDB credentials in the dashboard.
 

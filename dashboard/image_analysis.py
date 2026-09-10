@@ -14,6 +14,8 @@ MAX_IMAGE_PIXELS = 20_000_000
 def decode_photo(data: bytes) -> Image.Image:
     if not data or len(data) > MAX_IMAGE_BYTES:
         raise ValueError("Choose a JPEG or PNG image smaller than 10 MB.")
+    if not (data.startswith(b"\xff\xd8\xff") or data.startswith(b"\x89PNG\r\n\x1a\n")):
+        raise ValueError("Only JPEG and PNG images are supported.")
     try:
         with Image.open(BytesIO(data)) as source:
             if source.format not in {"JPEG", "PNG"}:
@@ -21,7 +23,12 @@ def decode_photo(data: bytes) -> Image.Image:
             if source.width * source.height > MAX_IMAGE_PIXELS:
                 raise ValueError("Choose an image with no more than 20 million pixels.")
             return ImageOps.exif_transpose(source).convert("RGB")
-    except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
+    except (
+        UnidentifiedImageError,
+        OSError,
+        Image.DecompressionBombError,
+        ModuleNotFoundError,
+    ) as exc:
         raise ValueError(
             "This file could not be opened as an image. Try another JPEG or PNG."
         ) from exc

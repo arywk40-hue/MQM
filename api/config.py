@@ -38,6 +38,13 @@ def _positive_int(name: str, default: int) -> int:
     return value
 
 
+def _choice(name: str, default: str, choices: set[str]) -> str:
+    value = os.environ.get(name, default).strip().lower()
+    if value not in choices:
+        raise ConfigurationError(f"{name} must be one of: {', '.join(sorted(choices))}")
+    return value
+
+
 def configured_camera_ids() -> tuple[str, ...]:
     """Return env-selected cameras, or every camera declared in zones.json."""
     try:
@@ -79,6 +86,7 @@ class Settings:
     read_cache_ttl_seconds: int
     max_upload_bytes: int
     cors_allow_origins: tuple[str, ...]
+    queue_estimator: str
 
 
 @lru_cache(maxsize=1)
@@ -95,6 +103,11 @@ def get_settings() -> Settings:
         read_cache_ttl_seconds=_positive_int("READ_CACHE_TTL_SECONDS", 5),
         max_upload_bytes=_positive_int("MAX_UPLOAD_BYTES", 10 * 1024 * 1024),
         cors_allow_origins=configured_cors_origins(),
+        queue_estimator=_choice(
+            "QUEUE_ESTIMATOR",
+            "production",
+            {"production", "geometric", "membership", "occlusion"},
+        ),
     )
 
 

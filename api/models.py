@@ -24,13 +24,32 @@ class CameraMetrics(BaseModel):
     zone_counts: dict[str, int]
     detections_raw: int = Field(ge=0)
     detections_counted: int = Field(ge=0)
+    queue_visible: int | None = Field(default=None, ge=0)
+    queue_hidden_estimate: int | None = Field(default=None, ge=0)
+    queue_ci_low: int | None = Field(default=None, ge=0)
+    queue_ci_high: int | None = Field(default=None, ge=0)
+    queue_method: str | None = None
+    queue_model_version: str | None = None
 
     @model_validator(mode="after")
     def validate_relationships(self) -> CameraMetrics:
         if self.timestamp.utcoffset() is None:
             raise ValueError("timestamp must include a timezone")
-        if self.queue_count > self.headcount:
+        if self.queue_hidden_estimate is None and self.queue_count > self.headcount:
             raise ValueError("queue_count cannot exceed headcount")
+        if self.queue_visible is not None and self.queue_visible > self.headcount:
+            raise ValueError("queue_visible cannot exceed headcount")
+        if self.queue_hidden_estimate is not None:
+            if self.queue_visible is None:
+                raise ValueError("queue_visible is required with hidden correction")
+            if self.queue_count != self.queue_visible + self.queue_hidden_estimate:
+                raise ValueError("queue_count must equal queue_visible + queue_hidden_estimate")
+        if (self.queue_ci_low is None) != (self.queue_ci_high is None):
+            raise ValueError("both queue confidence bounds must be present together")
+        if self.queue_ci_low is not None and not (
+            self.queue_ci_low <= self.queue_count <= self.queue_ci_high  # type: ignore[operator]
+        ):
+            raise ValueError("queue confidence bounds must contain queue_count")
         if self.seats_occupied > self.seats_total:
             raise ValueError("seats_occupied cannot exceed seats_total")
         if self.detections_counted > self.detections_raw:
@@ -68,6 +87,12 @@ class HistoryPoint(BaseModel):
     seats_total: int = Field(ge=0)
     seat_occupancy_pct: float = Field(ge=0, le=100)
     crowd_level: Literal["green", "amber", "red"]
+    queue_visible: int | None = Field(default=None, ge=0)
+    queue_hidden_estimate: int | None = Field(default=None, ge=0)
+    queue_ci_low: int | None = Field(default=None, ge=0)
+    queue_ci_high: int | None = Field(default=None, ge=0)
+    queue_method: str | None = None
+    queue_model_version: str | None = None
 
 
 class HistoryResponse(BaseModel):

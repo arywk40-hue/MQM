@@ -21,7 +21,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    get_settings()  # fail fast on missing credentials or invalid camera IDs
+    settings = get_settings()  # fail fast on missing credentials or invalid camera IDs
+    if settings.queue_estimator != "production":
+        from research.calibration import load_calibration
+        from research.config import load_research_config
+
+        load_research_config()
+        for camera_id in settings.known_cameras:
+            load_calibration(camera_id)
     yield
 
 

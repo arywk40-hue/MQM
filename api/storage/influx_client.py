@@ -43,6 +43,17 @@ def write_metrics(camera_id: str, metrics: dict, timestamp: datetime | None = No
         .field("zone_counts", json.dumps(metrics["zone_counts"], separators=(",", ":")))
         .time(timestamp, WritePrecision.NS)
     )
+    for name in (
+        "queue_visible",
+        "queue_hidden_estimate",
+        "queue_ci_low",
+        "queue_ci_high",
+        "queue_method",
+        "queue_model_version",
+    ):
+        value = metrics.get(name)
+        if value is not None:
+            point = point.field(name, value)
     get_influx_client().write_api(write_options=SYNCHRONOUS).write(
         bucket=settings.influx_bucket,
         org=settings.influx_org,
@@ -61,7 +72,9 @@ from(bucket: {json.dumps(settings.influx_bucket)})
   |> filter(fn: (r) => r.camera_id == {quoted_camera_id})
   |> filter(fn: (r) => contains(value: r._field, set: [
       "headcount", "queue_count", "seats_occupied", "seats_total",
-      "seat_occupancy_pct", "crowd_level"
+      "seat_occupancy_pct", "crowd_level", "queue_visible",
+      "queue_hidden_estimate", "queue_ci_low", "queue_ci_high",
+      "queue_method", "queue_model_version"
   ]))
   |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
   |> sort(columns: ["_time"])
@@ -71,17 +84,26 @@ from(bucket: {json.dumps(settings.influx_bucket)})
     for table in tables:
         for record in table.records:
             values = record.values
-            points.append(
-                {
-                    "timestamp": record.get_time(),
-                    "headcount": int(values["headcount"]),
-                    "queue_count": int(values["queue_count"]),
-                    "seats_occupied": int(values["seats_occupied"]),
-                    "seats_total": int(values["seats_total"]),
-                    "seat_occupancy_pct": float(values["seat_occupancy_pct"]),
-                    "crowd_level": str(values["crowd_level"]),
-                }
-            )
+            point = {
+                "timestamp": record.get_time(),
+                "headcount": int(values["headcount"]),
+                "queue_count": int(values["queue_count"]),
+                "seats_occupied": int(values["seats_occupied"]),
+                "seats_total": int(values["seats_total"]),
+                "seat_occupancy_pct": float(values["seat_occupancy_pct"]),
+                "crowd_level": str(values["crowd_level"]),
+            }
+            for name in (
+                "queue_visible",
+                "queue_hidden_estimate",
+                "queue_ci_low",
+                "queue_ci_high",
+                "queue_method",
+                "queue_model_version",
+            ):
+                if values.get(name) is not None:
+                    point[name] = values[name]
+            points.append(point)
     points.sort(key=lambda point: point["timestamp"])
     return points
 
