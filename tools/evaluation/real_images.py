@@ -40,6 +40,7 @@ def main() -> None:
     parser.add_argument("--iou", type=float, default=DEFAULT_IOU_THRESHOLD)
     parser.add_argument("--weights", default=DEFAULT_MODEL_WEIGHTS)
     parser.add_argument("--adaptive-confidence", action="store_true")
+    parser.add_argument("--trim-black-padding", action="store_true")
     parser.add_argument("--queue-mode", choices=("distance", "posture"), default="distance")
     args = parser.parse_args()
     try:
@@ -57,6 +58,7 @@ def main() -> None:
         image_size=args.image_size,
         iou_threshold=args.iou,
         adaptive_confidence=args.adaptive_confidence,
+        trim_black_padding=args.trim_black_padding,
     )
     labels = json.loads(args.labels.read_text())["records"]
     args.output.mkdir(parents=True, exist_ok=True)
@@ -143,6 +145,7 @@ def main() -> None:
         "image_size": args.image_size,
         "iou": args.iou,
         "adaptive_confidence": args.adaptive_confidence,
+        "trim_black_padding": args.trim_black_padding,
         "crowd_confidence": detector.crowd_confidence_threshold,
         "crowd_min_people": detector.crowd_min_people,
         "labels_sha256": hashlib.sha256(args.labels.read_bytes()).hexdigest(),

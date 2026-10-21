@@ -52,6 +52,8 @@ from typing import Any, cast
 import numpy as np
 from ultralytics import YOLO
 
+from inference.preprocessing import crop_black_padding
+
 # COCO class id for "person"
 PERSON_CLASS_ID = 0
 
@@ -111,6 +113,7 @@ class PersonDetector:
         adaptive_confidence: bool = False,
         crowd_confidence_threshold: float = DEFAULT_CROWD_CONFIDENCE_THRESHOLD,
         crowd_min_people: int = DEFAULT_CROWD_MIN_PEOPLE,
+        trim_black_padding: bool = False,
     ):
         if not 0 <= confidence_threshold <= 1:
             raise ValueError("confidence_threshold must be between 0 and 1")
@@ -129,6 +132,7 @@ class PersonDetector:
         self.adaptive_confidence = adaptive_confidence
         self.crowd_confidence_threshold = crowd_confidence_threshold
         self.crowd_min_people = crowd_min_people
+        self.trim_black_padding = trim_black_padding
         self._predict_lock = threading.Lock()
 
     def detect_people(
@@ -164,12 +168,16 @@ class PersonDetector:
         # Explicit per-call cutoffs remain fixed for controlled experiments.
         adaptive = self.adaptive_confidence and confidence_threshold is None
         candidate_conf = min(conf, self.crowd_confidence_threshold) if adaptive else conf
+        source = image
+        offset_x = offset_y = 0
+        if self.trim_black_padding and isinstance(image, np.ndarray):
+            source, offset_x, offset_y = crop_black_padding(image)
 
         # Ultralytics mutates predictor state; serialize calls on the shared
         # singleton so concurrent camera uploads cannot corrupt one another.
         with self._predict_lock:
             results = self.model.predict(
-                source=image,
+                source=source,
                 conf=candidate_conf,
                 iou=iou,
                 imgsz=imgsz,
@@ -191,7 +199,12 @@ class PersonDetector:
                     continue  # belt-and-suspenders, classes= should already filter
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 confidence = float(box.conf.item())
-                detections.append(Detection(bbox=[x1, y1, x2, y2], confidence=confidence))
+                detections.append(
+                    Detection(
+                        bbox=[x1 + offset_x, y1 + offset_y, x2 + offset_x, y2 + offset_y],
+                        confidence=confidence,
+                    )
+                )
 
         detections.sort(key=lambda d: d.confidence, reverse=True)
         candidates = [d for d in detections if d.confidence >= candidate_conf]
@@ -233,6 +246,9 @@ def get_detector() -> PersonDetector:
             adaptive_value = os.environ.get("MODEL_ADAPTIVE_CONFIDENCE", "true").strip().lower()
             if adaptive_value not in {"true", "false", "1", "0"}:
                 raise ValueError("MODEL_ADAPTIVE_CONFIDENCE must be true or false")
+            padding_value = os.environ.get("MODEL_TRIM_BLACK_PADDING", "false").strip().lower()
+            if padding_value not in {"true", "false", "1", "0"}:
+                raise ValueError("MODEL_TRIM_BLACK_PADDING must be true or false")
             _default_detector = PersonDetector(
                 weights_path=os.environ.get("MODEL_WEIGHTS", DEFAULT_MODEL_WEIGHTS),
                 confidence_threshold=confidence,
@@ -241,6 +257,7 @@ def get_detector() -> PersonDetector:
                 adaptive_confidence=adaptive_value in {"true", "1"},
                 crowd_confidence_threshold=crowd_confidence,
                 crowd_min_people=crowd_min_people,
+                trim_black_padding=padding_value in {"true", "1"},
             )
     return _default_detector
 

@@ -75,3 +75,18 @@ line versus blob rejection, cautious posture reassignment, exclusive counts,
 shared annotation colors, live timing/failure behavior, and UI queue metrics.
 The real 419 production result matches the notebook result. Docker/live storage
 and physical phone capture were not validated in this pass. No deployment run.
+
+## Frozen-weight accuracy experiments
+
+The later [accuracy study](reviews/2026-10-21-accuracy-trials.md) compares
+preprocessing and detector candidates without training on the supplied photos.
+Do not treat its reused 60-image benchmark as an unseen test or promote its
+highest-scoring settings solely to reach a count-match target.
+
+`MODEL_TRIM_BLACK_PADDING=true` optionally crops outer near-black screenshot
+padding before detection and restores original box coordinates for posture and
+camera geometry. It skips nearly black frames. This option is off by default:
+the complete distance pipeline's total-count error improves from 5.80 to 5.05,
+but standing error worsens from 3.82 to 4.08 and all-count matches fall from
+4/60 to 3/60. Add `--trim-black-padding` to the evaluation command to test it.
+Independent footage is required before enabling it for a camera.
