@@ -37,6 +37,7 @@ def validate_manifest(
     warnings: list[str] = []
     seen_ids: set[str] = set()
     hashes: dict[str, str] = {}
+    image_hashes: dict[str, str] = {}
     for record in manifest.images:
         if not record.image_id or record.image_id in seen_ids:
             errors.append(f"duplicate or empty image_id: {record.image_id!r}")
@@ -68,6 +69,7 @@ def validate_manifest(
             errors.append(f"{record.image_id}: image does not exist: {image_path}")
             continue
         digest = hashlib.sha256(image_path.read_bytes()).hexdigest()
+        image_hashes[record.image_id] = digest
         if digest in hashes:
             warnings.append(f"duplicate image content: {record.image_id} and {hashes[digest]}")
         else:
@@ -91,6 +93,8 @@ def validate_manifest(
     if split_paths:
         split_images: dict[str, str] = {}
         split_sessions: dict[str, str] = {}
+        split_content: dict[str, tuple[str, str]] = {}
+        split_clips: dict[tuple[str, str], str] = {}
         known = {item.image_id: item for item in manifest.images}
         for split_path in split_paths:
             split = load_split(split_path)
@@ -107,7 +111,25 @@ def validate_manifest(
                         f"image {image_id} appears in {split_images[image_id]} and {name}"
                     )
                 split_images[image_id] = name
-                session = known[image_id].session_id
+                record = known[image_id]
+                image_digest = image_hashes.get(image_id)
+                if image_digest is not None:
+                    previous = split_content.get(image_digest)
+                    if previous is not None and previous[0] != name:
+                        errors.append(
+                            f"duplicate image content crosses splits: {previous[1]} "
+                            f"in {previous[0]} and {image_id} in {name}"
+                        )
+                    else:
+                        split_content[image_digest] = (name, image_id)
+                if record.clip_id:
+                    clip = (record.camera_id, record.clip_id)
+                    if clip in split_clips and split_clips[clip] != name:
+                        errors.append(
+                            f"camera clip {clip} appears in {split_clips[clip]} and {name}"
+                        )
+                    split_clips[clip] = name
+                session = record.session_id
                 if declared_sessions and session not in declared_sessions:
                     errors.append(f"{name}: image {image_id} is outside its declared sessions")
                 if session in split_sessions and split_sessions[session] != name:

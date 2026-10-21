@@ -26,7 +26,7 @@ def make_manifest(tmp_path, sessions=("s1", "s2", "s3")):
     images = []
     for index, session in enumerate(sessions):
         filename = f"image-{index}.jpg"
-        Image.new("RGB", (100, 80), (index, 0, 0)).save(tmp_path / filename)
+        Image.new("RGB", (100, 80), (index * 19 % 256, 40, 10)).save(tmp_path / filename)
         images.append(
             {
                 "image_id": f"image-{index}",
@@ -80,6 +80,54 @@ def test_dataset_validation_detects_bad_box_and_session_leakage(tmp_path) -> Non
     split_b.write_text(json.dumps({**base, "name": "test", "image_ids": ["image-0"]}))
     report = validate_manifest(manifest, tmp_path, [split_a, split_b])
     assert any("appears in" in error for error in report.errors)
+
+
+def test_identical_images_cannot_cross_splits_under_different_ids_and_sessions(tmp_path) -> None:
+    manifest_path = make_manifest(tmp_path)
+    (tmp_path / "image-1.jpg").write_bytes((tmp_path / "image-0.jpg").read_bytes())
+    splits = []
+    for index, name in enumerate(("train", "test")):
+        path = tmp_path / f"{name}.json"
+        path.write_text(
+            json.dumps({"name": name, "dataset_version": "v1", "image_ids": [f"image-{index}"]})
+        )
+        splits.append(path)
+    report = validate_manifest(load_manifest(manifest_path), tmp_path, splits)
+    assert not report.valid
+    assert any("duplicate image content crosses splits" in e for e in report.errors)
+
+
+def test_duplicate_within_one_split_is_a_warning(tmp_path) -> None:
+    manifest_path = make_manifest(tmp_path)
+    (tmp_path / "image-1.jpg").write_bytes((tmp_path / "image-0.jpg").read_bytes())
+    split = tmp_path / "train.json"
+    split.write_text(
+        json.dumps({"name": "train", "dataset_version": "v1", "image_ids": ["image-0", "image-1"]})
+    )
+    report = validate_manifest(load_manifest(manifest_path), tmp_path, [split])
+    assert report.valid
+    assert any("duplicate image content" in w for w in report.warnings)
+
+
+def test_same_camera_clip_cannot_leak_by_changing_session_names(tmp_path) -> None:
+    manifest_path = make_manifest(tmp_path)
+    raw = json.loads(manifest_path.read_text())
+    for row in raw["images"]:
+        row["clip_id"] = "lunch-video"
+    manifest_path.write_text(json.dumps(raw))
+    splits = []
+    for index, name in enumerate(("train", "test")):
+        path = tmp_path / f"{name}.json"
+        path.write_text(
+            json.dumps({"name": name, "dataset_version": "v1", "image_ids": [f"image-{index}"]})
+        )
+        splits.append(path)
+    report = validate_manifest(load_manifest(manifest_path), tmp_path, splits)
+    assert any("camera clip" in e for e in report.errors)
+    # Independent cameras can reuse a clip filename without sharing frames.
+    raw["images"][1]["camera_id"] = "second-camera"
+    manifest_path.write_text(json.dumps(raw))
+    assert validate_manifest(load_manifest(manifest_path), tmp_path, splits).valid
 
 
 def test_queue_membership_metrics_and_session_bootstrap() -> None:

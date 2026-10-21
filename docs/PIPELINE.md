@@ -76,7 +76,7 @@ only for records carrying `queue_count`; other standing error requires
 `roaming_count`. Per-image boxes and model posture probabilities are retained in
 local evaluation JSON. No raw photos or source annotations are committed.
 
-129 tests passed and 1 opt-in live-storage test skipped in the isolated validation
+136 tests passed and 1 opt-in live-storage test skipped in the isolated validation
 copy. Ruff lint/format and MyPy cover the runtime and UI. Tests check grouping,
 line versus blob rejection, cautious posture reassignment, exclusive counts,
 shared annotation colors, live timing/failure behavior, and UI queue metrics.
@@ -97,3 +97,10 @@ an earlier comparison with the original chained rule reduced total-count error f
 but standing error worsens from 3.82 to 4.08 and all-count matches fall from
 4/60 to 3/60. Add `--trim-black-padding` to the evaluation command to test it.
 Independent footage is required before enabling it for a camera.
+
+The [fixed-camera accuracy review](reviews/2026-10-21-fixed-camera-accuracy.md)
+adds a frozen YOLO11m full-frame versus overlapping-crop comparison. Both remain
+experimental: full-frame improves some metrics but worsens standing error;
+slicing reduces overall total/sitting MAE while worsening standing error and
+exact-label total MAE. No default detector switch was made. The camera is not
+mounted yet; saved stock-photo zones require replacement with its real view.

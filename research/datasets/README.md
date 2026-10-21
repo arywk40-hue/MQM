@@ -13,6 +13,11 @@ writer refuses to overwrite any existing split file.
 The validator checks files, image readability, box bounds, labels, non-negative ground
 truth, duplicate IDs, cross-split image/session leakage, version mismatch, duplicate image
 hashes, and visible-label/ground-truth inconsistencies.
+Byte-identical content across splits is an error even when image IDs and session
+names differ. Frames with the same camera ID and clip ID must stay in one split.
+Duplicates within one split remain warnings. Re-encoded, cropped, or neighboring
+images still require accurate source/session metadata; byte hashes alone cannot
+detect those relationships.
 
 Membership training consumes a derived JSON feature manifest. It must declare
 `dataset_version`, `split`, `feature_version`, and `people`. Every person row contains an
