@@ -1,8 +1,8 @@
 # Final photo and phone-camera pipeline
 
-The selected distance-based pipeline is promoted from the last `run_pipeline`
-definition in Ishan's merged `training/mess_classifiers.ipynb`. Runtime never
-executes notebook cells or training code.
+The distance-based pipeline comes from the last `run_pipeline` definition in
+Ishan's merged `training/mess_classifiers.ipynb`, with a later safeguard against
+recursive posture reassignment. Runtime never executes notebook cells or training code.
 
 1. Decode and orient the photo (or receive a BGR video frame).
 2. YOLOv8n detects people in original frame coordinates, at image size 1280 and
@@ -14,7 +14,9 @@ executes notebook cells or training code.
 4. Group standing people by bottom-center distance normalized by mean body height.
    Use distance threshold 1.6, minimum group size 3, and line elongation at least 2.
 5. Reassign uncertain seated predictions to a nearby queue when seated probability
-   is at most 0.9 and head-height difference is at most 0.2 of body height.
+   is at most 0.9 and head-height difference is at most 0.2 of body height. Require
+   two original standing members of the same queue as supporting neighbors.
+   Reassigned seated predictions cannot act as supporting neighbors themselves.
 6. Give each detected person exactly one output category: Queue, Sitting, or Other
    standing. These three counts sum to headcount. Blue Q, orange S, and green O
    boxes match the displayed counts in photos, downloads, and phone-camera video.
@@ -43,15 +45,20 @@ These are new results, distinct from the earlier 59-image exploratory comparison
 | Mean absolute count error, same 60 images | Posture-only | Final distance categories |
 | --- | ---: | ---: |
 | Headcount | 5.800 | 5.800 |
-| Sitting | 4.617 | 5.167 |
-| Standing including queued people | 3.550 | 3.817 |
+| Sitting | 4.617 | 4.550 |
+| Standing including queued people | 3.550 | 3.500 |
 
-Distance grouping worsens aggregate posture errors here, even though it improves
-419's queue estimate. Only 419 has a confirmed queue label, so broader queue
+The bounded reassignment guard reduces errors compared with the previous chained
+rule (sitting 5.167 and standing 3.817); differences relative to raw posture-only
+counts are small. Only 419 has a confirmed queue label, so broader queue
 accuracy is unknown. Do not describe these count errors as per-person accuracy.
 Review person boxes and collect queue labels across new capture sessions before
 using this as a validated operational queue counter. No new classifier training
 was performed.
+
+The latest [bounded-reassignment review](reviews/2026-10-21-bounded-rescue.md)
+records the fresh 60-image check, session-group results, and remaining detection
+bottleneck. All three counts still match on 4/60 images; the 30/60 target is unmet.
 
 ## Run and verify
 
@@ -69,7 +76,7 @@ only for records carrying `queue_count`; other standing error requires
 `roaming_count`. Per-image boxes and model posture probabilities are retained in
 local evaluation JSON. No raw photos or source annotations are committed.
 
-119 tests passed and 1 opt-in live-storage test skipped in the isolated validation
+129 tests passed and 1 opt-in live-storage test skipped in the isolated validation
 copy. Ruff lint/format and MyPy cover the runtime and UI. Tests check grouping,
 line versus blob rejection, cautious posture reassignment, exclusive counts,
 shared annotation colors, live timing/failure behavior, and UI queue metrics.
@@ -86,7 +93,7 @@ highest-scoring settings solely to reach a count-match target.
 `MODEL_TRIM_BLACK_PADDING=true` optionally crops outer near-black screenshot
 padding before detection and restores original box coordinates for posture and
 camera geometry. It skips nearly black frames. This option is off by default:
-the complete distance pipeline's total-count error improves from 5.80 to 5.05,
+an earlier comparison with the original chained rule reduced total-count error from 5.80 to 5.05,
 but standing error worsens from 3.82 to 4.08 and all-count matches fall from
 4/60 to 3/60. Add `--trim-black-padding` to the evaluation command to test it.
 Independent footage is required before enabling it for a camera.

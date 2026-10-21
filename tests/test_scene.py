@@ -58,6 +58,57 @@ def test_empty_scene_and_invalid_posture_alignment():
         summarize_scene([person(0)], [])
 
 
+def test_original_seed_policy_prevents_seated_row_from_extending_queue():
+    detections = [person(x) for x in (0, 30, 60, 200, 340)]
+    postures = [PosturePrediction("Standing", 0.95)] * 3 + [PosturePrediction("Sitting", 0.8)] * 2
+    legacy = {"rescue_allow_chaining": True, "rescue_min_neighbors": 1}
+    default = summarize_scene(detections, postures, queue_settings=legacy)
+    bounded = summarize_scene(
+        detections,
+        postures,
+        queue_settings={"rescue_allow_chaining": False, "rescue_min_neighbors": 1},
+    )
+    assert default["rescued_count"] == 2
+    assert bounded["rescued_count"] == 1
+    assert bounded["sitting"] == 1
+    # An experimental override must not change later default calls.
+    assert summarize_scene(detections, postures)["rescued_count"] == 0
+
+
+def test_two_seed_policy_requires_neighbors_from_the_same_queue():
+    settings = {"rescue_allow_chaining": False, "rescue_min_neighbors": 2}
+    standing = [PosturePrediction("Standing", 0.95)] * 3
+    sitting = [PosturePrediction("Sitting", 0.8)]
+    one = summarize_scene(
+        [person(x) for x in (0, 30, 60, 200)], standing + sitting, queue_settings=settings
+    )
+    two = summarize_scene(
+        [person(x) for x in (0, 30, 60, 180)], standing + sitting, queue_settings=settings
+    )
+    assert one["rescued_count"] == 0
+    assert two["rescued_count"] == 1
+    assert (
+        summarize_scene([person(x) for x in (0, 30, 60, 200)], standing + sitting)["rescued_count"]
+        == 0
+    )
+    assert (
+        summarize_scene([person(x) for x in (0, 30, 60, 180)], standing + sitting)["rescued_count"]
+        == 1
+    )
+    split = summarize_scene(
+        [person(x) for x in (0, 20, 40, 340, 360, 380, 190)],
+        standing * 2 + sitting,
+        queue_settings=settings,
+    )
+    assert split["queue_groups"] == 2
+    assert split["rescued_count"] == 0
+
+
+def test_rescue_neighbor_count_must_be_positive():
+    with pytest.raises(ValueError, match="rescue_min_neighbors"):
+        summarize_scene([], [], queue_settings={"rescue_min_neighbors": 0})
+
+
 def test_annotations_use_category_colors_without_mutating_source():
     source = Image.new("RGB", (160, 100), "white")
     people = [

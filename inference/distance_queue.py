@@ -74,6 +74,8 @@ def assign_queue_by_distance(
     min_member_conf=None,
     rescue_max_p_seated=None,
     rescue_head_tol=0.2,
+    rescue_allow_chaining=True,
+    rescue_min_neighbors=1,
 ):
     """
     Step 1: link STANDING people whose feet are within dist_threshold (chained into groups).
@@ -96,12 +98,17 @@ def assign_queue_by_distance(
       (within dist_threshold AND head height within rescue_head_tol of that member's). This fixes
       queue members whose legs are hidden by tables: head+torso looks seated, but their position in
       the line says otherwise. None = off.
+    rescue_allow_chaining=False restricts evidence to the original standing queue
+    members, preventing rescued seated people from extending a queue recursively.
+    rescue_min_neighbors requires this many eligible neighbors in the SAME queue.
 
     Seated people are otherwise ignored. Sets det["in_queue"], det["queue_group"],
     det["queue_reject"], det["rescued"] in place. Returns (number_of_queue_groups, rejected).
     Rejected is a list of
     {"size": n, "reason": ...} for groups of 2+ people that were linked but NOT called a queue.
     """
+    if rescue_min_neighbors < 1:
+        raise ValueError("rescue_min_neighbors must be at least 1")
     standing_idx = [
         i
         for i, d in enumerate(detections)
@@ -159,6 +166,7 @@ def assign_queue_by_distance(
             if size >= 2:
                 rejected.append({"size": size, "reason": reason})
     if rescue_max_p_seated is not None:
+        original_members = {i for i, d in enumerate(detections) if d["in_queue"]}
         cands = [
             i
             for i, d in enumerate(detections)
@@ -177,13 +185,20 @@ def assign_queue_by_distance(
                     not point_in_polygon(foot_point(c["bbox"]), queue_zone)
                 ):
                     continue
+                neighbor_groups: dict[int, list[int]] = {}
                 for j, m in enumerate(detections):
                     if j == i or not m["in_queue"]:
+                        continue
+                    if not rescue_allow_chaining and j not in original_members:
                         continue
                     if pair_distance(c, m, normalize) > dist_threshold:
                         continue
                     h = max(box_height(c["bbox"]), box_height(m["bbox"]))
                     if abs(c["bbox"][1] - m["bbox"][1]) <= rescue_head_tol * h:
+                        neighbors = neighbor_groups.setdefault(m["queue_group"], [])
+                        neighbors.append(j)
+                        if len(neighbors) < rescue_min_neighbors:
+                            continue
                         c["in_queue"], c["queue_group"], c["rescued"] = (
                             True,
                             m["queue_group"],

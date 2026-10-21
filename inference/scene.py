@@ -9,17 +9,25 @@ import numpy as np
 from inference.distance_queue import assign_queue_by_distance
 from inference.posture import PosturePrediction, classify_postures
 
-# Match the last notebook run_pipeline defaults that generated distance-boxes.png.
+# Notebook geometry with bounded rescue: use two original standing members,
+# never let a rescued seated prediction extend the queue recursively.
 DISTANCE_QUEUE_SETTINGS = {
     "dist_threshold": 1.6,
     "min_group_size": 3,
     "min_elongation": 2.0,
     "rescue_max_p_seated": 0.9,
     "rescue_head_tol": 0.2,
+    "rescue_allow_chaining": False,
+    "rescue_min_neighbors": 2,
 }
 
 
-def summarize_scene(detections: list[dict], postures: list[PosturePrediction]) -> dict[str, Any]:
+def summarize_scene(
+    detections: list[dict],
+    postures: list[PosturePrediction],
+    *,
+    queue_settings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Group people and give each exactly one final category; never mutate inputs."""
     if len(detections) != len(postures):
         raise ValueError("Each person detection must have one posture prediction")
@@ -35,7 +43,8 @@ def summarize_scene(detections: list[dict], postures: list[PosturePrediction]) -
                 "raw_posture": posture.label,
             }
         )
-    groups, rejected = assign_queue_by_distance(people, **DISTANCE_QUEUE_SETTINGS)
+    settings = {**DISTANCE_QUEUE_SETTINGS, **(queue_settings or {})}
+    groups, rejected = assign_queue_by_distance(people, **settings)
     for person in people:
         person["category"] = (
             "Queue" if person["in_queue"] else "Sitting" if person["seated"] else "Other standing"
