@@ -8,11 +8,13 @@ import time
 from typing import Any
 
 import av
-import cv2
+import numpy as np
 import streamlit as st
+from PIL import Image
 from streamlit_webrtc import WebRtcMode, webrtc_streamer
 
-from inference.posture import PosturePrediction, classify_postures  # noqa: F401
+from inference.annotations import LEGEND, annotate_people
+from inference.scene import analyze_scene
 
 logger = logging.getLogger(__name__)
 
@@ -49,44 +51,31 @@ class LiveDetector:
                     image = frame.to_ndarray(format="bgr24")
                     detections = detect_people(image)
                     posture_error = None
+                    scene = None
                     try:
-                        postures = classify_postures(image, detections)
+                        scene = analyze_scene(image, detections)
                     except Exception:
-                        logger.exception("Live posture classification failed")
-                        postures = []
+                        logger.exception("Live queue/posture analysis failed")
                         posture_error = (
-                            "Posture classification is unavailable; person counting continues."
+                            "Queue and posture estimates are unavailable; "
+                            "person counting continues."
                         )
-                    for index, detection in enumerate(detections, 1):
-                        x1, y1, x2, y2 = map(int, detection["bbox"])
-                        posture = postures[index - 1] if index <= len(postures) else None
-                        colour = (
-                            (52, 180, 52)
-                            if posture is None or posture.label == "Standing"
-                            else (0, 165, 255)
-                        )
-                        label = str(index)
-                        if posture is not None:
-                            label = f"{index} {posture.label} {posture.confidence:.0%}"
-                        cv2.rectangle(image, (x1, y1), (x2, y2), colour, 2)
-                        cv2.putText(
-                            image,
-                            label,
-                            (x1, max(20, y1)),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.6,
-                            colour,
-                            2,
-                        )
-                    sitting = sum(posture.label == "Sitting" for posture in postures)
-                    standing = sum(posture.label == "Standing" for posture in postures)
+                    annotated = annotate_people(
+                        Image.fromarray(image[:, :, ::-1]),
+                        scene["people"] if scene is not None else detections,
+                    )
+                    image = np.asarray(annotated)[:, :, ::-1].copy()
                     with self.lock:
                         self.latest = image
                         self.state = {
                             "headcount": len(detections),
-                            "sitting": sitting,
-                            "standing": standing,
-                            "posture_available": len(postures) == len(detections),
+                            "sitting": scene["sitting"] if scene is not None else None,
+                            "standing": scene["standing"] if scene is not None else None,
+                            "queue_count": scene["queue_count"] if scene is not None else None,
+                            "standing_other_count": (
+                                scene["standing_other_count"] if scene is not None else None
+                            ),
+                            "posture_available": scene is not None,
                             "posture_error": posture_error,
                             "seconds": time.monotonic() - now,
                             "updated": time.monotonic(),
@@ -111,13 +100,14 @@ class LiveDetector:
 def render_live_camera() -> None:
     st.subheader("Phone camera")
     st.caption(
-        "Tap START and allow camera access. Keep this page open to count people and classify "
-        "sitting or standing continuously."
+        "Tap START and allow camera access. Keep this page open to estimate the queue, "
+        "sitting people, and other standing people continuously."
     )
     st.info("On your phone, open the HTTPS address. On this Mac, localhost also works.")
+    st.caption(LEGEND)
     st.caption(
         "Video is sent to this Mac for analysis. Audio is off. Frames and results are not saved. "
-        "Queue membership still requires a fixed, calibrated camera viewpoint."
+        "Queue grouping uses people’s positions in the image and may confuse nearby groups."
     )
     if "live_posture_detector" not in st.session_state:
         st.session_state["live_posture_detector"] = LiveDetector()
@@ -155,8 +145,23 @@ def render_live_camera() -> None:
         else:
             with st.container(horizontal=True):
                 st.metric("People", state["headcount"], border=True)
-                st.metric("Sitting", state.get("sitting", 0), border=True)
-                st.metric("Standing", state.get("standing", 0), border=True)
+                st.metric(
+                    "Queue estimate",
+                    state.get("queue_count") if state.get("queue_count") is not None else "—",
+                    border=True,
+                )
+                st.metric(
+                    "Sitting",
+                    state.get("sitting") if state.get("sitting") is not None else "—",
+                    border=True,
+                )
+                st.metric(
+                    "Other standing",
+                    state.get("standing_other_count")
+                    if state.get("standing_other_count") is not None
+                    else "—",
+                    border=True,
+                )
             if state.get("posture_error"):
                 st.warning(state["posture_error"])
             st.caption(f"Analysis: {state['seconds']:.2f}s · updates up to twice per second")

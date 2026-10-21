@@ -136,6 +136,39 @@ _default_classifiers: PersonAttributeClassifiers | None = None
 _default_classifiers_lock = threading.Lock()
 
 
+class SeatedClassifier:
+    """Distance grouping needs only the seated model, not the queue crop model."""
+
+    def __init__(self, weights: str | Path = SEATED_WEIGHTS) -> None:
+        self.model = _load_mobilenet_v2(weights)
+        self._lock = threading.Lock()
+
+    def predict(
+        self, image: np.ndarray, assignments: list[ZoneAssignment]
+    ) -> tuple[list[int], list[float]]:
+        if not assignments:
+            return [], []
+        crops = torch.stack([_crop_tensor(image, assignment.bbox) for assignment in assignments])
+        with self._lock:
+            return PersonAttributeClassifiers._predict(self.model, crops)
+
+
+_default_seated_classifier: SeatedClassifier | None = None
+_default_seated_lock = threading.Lock()
+
+
+def get_seated_classifier() -> SeatedClassifier:
+    global _default_seated_classifier
+    if _default_seated_classifier is not None:
+        return _default_seated_classifier
+    with _default_seated_lock:
+        if _default_seated_classifier is None:
+            _default_seated_classifier = SeatedClassifier(
+                os.environ.get("SEATED_CLASSIFIER_WEIGHTS", SEATED_WEIGHTS)
+            )
+    return _default_seated_classifier
+
+
 def get_attribute_classifiers() -> PersonAttributeClassifiers:
     global _default_classifiers
     if _default_classifiers is not None:

@@ -5,7 +5,9 @@ from __future__ import annotations
 from io import BytesIO
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
+
+from inference.annotations import annotate_people
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_IMAGE_PIXELS = 20_000_000
@@ -54,20 +56,20 @@ def analyze_photo(data: bytes, camera_id: str | None = None, rotation_degrees_cc
     detections = detect_people(frame)
     from inference.classifiers import attribute_classifiers_enabled
 
-    postures = []
+    scene = None
     posture_error = None
-    posture_available = False
     if attribute_classifiers_enabled():
-        from inference.posture import classify_postures
+        from inference.scene import analyze_scene
 
         try:
-            postures = classify_postures(frame, detections)
-            posture_available = True
+            scene = analyze_scene(frame, detections)
         except Exception:
             import logging
 
-            logging.getLogger(__name__).exception("Photo posture classification failed")
-            posture_error = "Posture classification is unavailable; person counting continues."
+            logging.getLogger(__name__).exception("Photo queue/posture analysis failed")
+            posture_error = (
+                "Queue and posture estimates are unavailable; person counting continues."
+            )
     metrics = None
     if camera_id:
         from inference.classifiers import classify_people
@@ -85,20 +87,16 @@ def analyze_photo(data: bytes, camera_id: str | None = None, rotation_degrees_cc
             seated_flags=[item.is_seated for item in attributes] if attributes else None,
         )
 
-    drawing = ImageDraw.Draw(image)
-    for index, detection in enumerate(detections, start=1):
-        x1, y1, x2, y2 = detection["bbox"]
-        drawing.rectangle((x1, y1, x2, y2), outline="#16a34a", width=3)
-        label = str(index)
-        if postures:
-            label += f" {postures[index - 1].label}"
-        drawing.text((x1 + 3, y1 + 3), label, fill="white", stroke_width=2, stroke_fill="black")
+    image = annotate_people(image, scene["people"] if scene is not None else detections)
     output = BytesIO()
     image.save(output, format="PNG")
     return {
         "headcount": len(detections),
-        "sitting": sum(p.label == "Sitting" for p in postures) if posture_available else None,
-        "standing": sum(p.label == "Standing" for p in postures) if posture_available else None,
+        "sitting": scene["sitting"] if scene is not None else None,
+        "standing": scene["standing"] if scene is not None else None,
+        "queue_count": scene["queue_count"] if scene is not None else None,
+        "standing_other_count": scene["standing_other_count"] if scene is not None else None,
+        "scene": scene,
         "posture_error": posture_error,
         "detections": detections,
         "metrics": metrics,

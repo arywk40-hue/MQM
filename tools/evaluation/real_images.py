@@ -1,7 +1,7 @@
 """Evaluate image-level count intervals with the production detector and posture model.
 
 Run from the repo root: python -m tools.evaluation.real_images --help
-No queue scores: sitting/standing annotations cannot establish queue membership.
+Queue errors are measured only for images that include a queue_count annotation.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from inference.model import (
     PersonDetector,
 )
 from inference.posture import classify_postures
+from inference.scene import DISTANCE_QUEUE_SETTINGS, summarize_scene
 
 
 def interval_error(prediction: int, label: dict) -> int:
@@ -39,6 +40,7 @@ def main() -> None:
     parser.add_argument("--iou", type=float, default=DEFAULT_IOU_THRESHOLD)
     parser.add_argument("--weights", default=DEFAULT_MODEL_WEIGHTS)
     parser.add_argument("--adaptive-confidence", action="store_true")
+    parser.add_argument("--queue-mode", choices=("distance", "posture"), default="distance")
     args = parser.parse_args()
     try:
         from pillow_heif import register_heif_opener
@@ -89,18 +91,34 @@ def main() -> None:
                 "standing": sum(p.label == "Standing" for p in postures),
                 "headcount": len(detections),
             }
+            scene = summarize_scene(detections, postures) if args.queue_mode == "distance" else None
+            if scene is not None:
+                counts.update(
+                    {
+                        key: scene[key]
+                        for key in ("sitting", "standing", "queue_count", "standing_other_count")
+                    }
+                )
             total = {key: label["sitting"][key] + label["standing"][key] for key in ("min", "max")}
             expected = {
                 "sitting": label["sitting"],
                 "standing": label["standing"],
                 "headcount": total,
             }
+            if scene is not None and label.get("queue_count") is not None:
+                expected["queue_count"] = {"min": label["queue_count"], "max": label["queue_count"]}
+            if scene is not None and label.get("roaming_count") is not None:
+                expected["standing_other_count"] = {
+                    "min": label["roaming_count"],
+                    "max": label["roaming_count"],
+                }
             row.update(
                 status="ok",
+                scene=scene,
                 predicted=counts,
                 expected=expected,
                 absolute_interval_error={
-                    key: interval_error(value, expected[key]) for key, value in counts.items()
+                    key: interval_error(counts[key], interval) for key, interval in expected.items()
                 },
                 exact=all(label[key]["exact"] for key in ("sitting", "standing")),
                 detections=detections,
@@ -118,7 +136,9 @@ def main() -> None:
         rows.append(row)
         (args.output / "predictions.json").write_text(json.dumps(rows, indent=2))
     summary = {
-        "annotation": "Image-level sitting/standing counts; no queue ground truth",
+        "annotation": "Image-level counts; queue error only where queue labels exist",
+        "queue_mode": args.queue_mode,
+        "distance_settings": DISTANCE_QUEUE_SETTINGS if args.queue_mode == "distance" else None,
         "confidence": args.confidence,
         "image_size": args.image_size,
         "iou": args.iou,
@@ -155,6 +175,18 @@ def main() -> None:
                 for key in ("headcount", "sitting", "standing")
             },
         }
+    queue_labeled = [
+        r for r in rows if r["status"] == "ok" and "queue_count" in r["absolute_interval_error"]
+    ]
+    summary["queue_labeled"] = {
+        "images": len(queue_labeled),
+        "mean_absolute_count_error": (
+            sum(r["absolute_interval_error"]["queue_count"] for r in queue_labeled)
+            / len(queue_labeled)
+            if queue_labeled
+            else None
+        ),
+    }
     (args.output / "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
     if not summary["all"]["images"]:

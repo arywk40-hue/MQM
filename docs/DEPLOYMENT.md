@@ -24,7 +24,7 @@ health checks. No raw training/evaluation photos are copied into the image.
    Keep database ports private. The dashboard receives only the read API URL;
    backend credentials are passed only to the API.
 5. Calibrate `config/zones.json` for the mounted camera. Current sample geometry
-   does not apply to arbitrary real images. Photo posture counts do not need zones.
+   does not apply to arbitrary real images. Photo/live distance queue and posture estimates do not need zones.
 
 The phone video mode currently uses local peer connectivity without STUN/TURN.
 Remote internet video requires separately configured WebRTC connectivity and

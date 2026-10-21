@@ -74,7 +74,7 @@ def test_photo_posture_counts_share_live_classifier(monkeypatch):
         SimpleNamespace(detect_people=lambda _: [{"bbox": [5, 5, 30, 50], "confidence": 0.9}]),
     )
     monkeypatch.setattr(
-        "inference.posture.classify_postures",
+        "inference.scene.classify_postures",
         lambda *_: [PosturePrediction("Sitting", 0.9)],
     )
     result = analyze_photo(photo_bytes())
@@ -94,7 +94,7 @@ def test_photo_posture_failure_keeps_detection_count(monkeypatch):
     def fail(*_):
         raise RuntimeError("checkpoint unavailable")
 
-    monkeypatch.setattr("inference.posture.classify_postures", fail)
+    monkeypatch.setattr("inference.scene.classify_postures", fail)
     result = analyze_photo(photo_bytes())
     assert result["headcount"] == 1
     assert result["sitting"] is None and result["standing"] is None

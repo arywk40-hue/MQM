@@ -104,3 +104,36 @@ def test_dashboard_surfaces_read_api_failure(monkeypatch):
     app = run_app(monkeypatch, "http://broken-api", get)
     assert not app.exception
     assert "Read API request failed" in app.error[0].value
+
+
+def test_photo_results_show_distance_queue_and_color_legend(monkeypatch):
+    from io import BytesIO
+
+    from PIL import Image
+
+    output = BytesIO()
+    Image.new("RGB", (100, 80)).save(output, format="PNG")
+    app = AppTest.from_file(APP).run(timeout=20)
+    app.session_state["photo_selection"] = (None, None, 0)
+    app.session_state["photo_result"] = {
+        "name": "test.png",
+        "headcount": 6,
+        "queue_count": 4,
+        "sitting": 1,
+        "standing_other_count": 1,
+        "scene": {"method": "distance"},
+        "posture_error": None,
+        "width": 100,
+        "height": 80,
+        "metrics": None,
+        "image": output.getvalue(),
+    }
+    app.run(timeout=20)
+    assert not app.exception
+    assert [(m.label, m.value) for m in app.metric] == [
+        ("People detected", "6"),
+        ("Queue estimate", "4"),
+        ("Sitting estimate", "1"),
+        ("Other standing", "1"),
+    ]
+    assert any("Blue Q" in caption.value for caption in app.caption)

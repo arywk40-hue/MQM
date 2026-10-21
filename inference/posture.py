@@ -21,7 +21,7 @@ def classify_postures(
     if not detections:
         return []
 
-    from inference.classifiers import classify_people
+    from inference.classifiers import get_seated_classifier
     from inference.zones import ZoneAssignment, reference_point
 
     assignments = [
@@ -32,11 +32,11 @@ def classify_postures(
         )
         for detection in detections
     ]
-    attributes = classify_people(image, assignments)
+    labels, confidence = get_seated_classifier().predict(image, assignments)
     return [
         PosturePrediction(
-            label="Sitting" if attribute.is_seated else "Standing",
-            confidence=attribute.seated_confidence,
+            label="Sitting" if label == 0 else "Standing",
+            confidence=score,
         )
-        for attribute in attributes
+        for label, score in zip(labels, confidence, strict=True)
     ]

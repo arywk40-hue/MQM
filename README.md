@@ -11,24 +11,27 @@ downloadable image with numbered detection boxes. Results remain in the browser
 session without the camera TTL; uploads do not write to Redis or InfluxDB.
 
 `data/samples/local/` is intentionally ignored by Git so that personal, licensed,
-or otherwise non-redistributable test photos are never committed. Queue and
-seating estimates are only meaningful when the image matches the saved camera
-viewpoint and resolution; otherwise use the person count alone.
+or otherwise non-redistributable test photos are never committed. Distance-based queue and posture counts are estimates for each photo. Seat occupancy
+and calibrated camera metrics require the saved viewpoint and resolution.
 
-For arbitrary photos, person detection and optional sitting/standing estimates are reported. Enable **Use saved mess
-layout** only for the same viewpoint and resolution as a configured camera to
-obtain queue, seating, and crowd estimates. The dashboard intentionally has no
-public built-in photo sample; place photos you are allowed to use in the ignored
-local-samples folder instead. Matching resolution alone does not make a different
-photo compatible with the zones. These are estimates, not a general image-description
-service.
+For arbitrary photos, the default pipeline is **YOLOv8n → Ishan's seated classifier
+→ distance-based queue grouping**. It reports total people, queued people, sitting
+people, and other standing people. These last three categories sum to the total.
+Blue Q boxes mark queue estimates, orange S marks sitting, and green O marks other
+standing people. The grouping can confuse nearby groups with queues. It does not
+use the queue crop classifier to decide membership.
+
+Enable **Use saved mess layout** only for the configured camera's viewpoint and
+resolution to add zone-based queue, seat occupancy, and crowd metrics. Uploaded
+photos are not written to camera history. The dashboard has no public built-in
+photo samples; put permitted photos in the ignored local-samples folder.
 
 Photo analysis runs the repository's YOLO and optional attribute classifiers in
 the dashboard process. Install the full `requirements.txt` and local model weights
 on that host; it does not need a running API or database. **Live cameras** retains
 the API-backed, read-only monitoring view.
 
-This README documents the implemented software, not only the original project proposal. Status is current as of 4 September 2026.
+This README documents the implemented software, not only the original project proposal. Current photo/live distance pipeline finalized on 21 October 2026.
 
 ## Live phone camera on local Wi-Fi
 
@@ -58,8 +61,9 @@ download on port 8765. No public tunnel, STUN service, or TURN relay is configur
 The rear camera is preferred and audio is disabled. Frames are analyzed on the
 Mac up to twice per second; the returned video shows the latest analyzed frame
 with boxes. Frames and counts are not persisted to Redis/InfluxDB. This handheld
-mode reports people only; queue/seating metrics still need a calibrated fixed
-camera using the existing ingestion system. Keep Safari open and the Mac awake.
+mode estimates queued, sitting, and other standing people using the same distance
+pipeline as photo uploads. Calibrated seat occupancy and camera history still
+use the existing fixed-camera ingestion system. Keep Safari open and the Mac awake.
 
 The test certificate expires in seven days and is stored outside the repository;
 each launcher run creates a new certificate and access code. Stop the launcher
@@ -129,9 +133,12 @@ The dashboard never receives database credentials or connects directly to Redis/
 - inference/pipeline.py decodes JPEG bytes, validates camera coordinate space, and runs the full inference-to-metrics path.
 - inference/zones.py maps person floor points to configured polygons and rejects incompatible frame dimensions instead of producing false zeroes.
 - inference/metrics.py produces headcount, queue count, occupied seats, occupancy percentage, crowd level, per-zone counts, and detection totals.
+- inference/scene.py shares the finalized photo/live distance queue estimates.
+- inference/distance_queue.py promotes the notebook grouping and posture correction into runtime code.
+- inference/annotations.py draws shared blue/orange/green category boxes.
 - inference/classifiers.py safely loads two reviewed tensor-only MobileNetV2 state dictionaries and classifies YOLO person crops in a batch.
 
-Queue classification applies only to people already in a queue zone. Seated classification applies only to people in a seating zone. This combines visual posture/context with the physical layout rather than allowing a classifier to invent a queue or seat anywhere in the frame.
+In the calibrated API, queue classification applies only to people already in a queue zone. Seated classification applies only to people in a seating zone. This combines visual posture/context with the physical layout rather than allowing a classifier to invent a queue or seat anywhere in the frame.
 
 ### Backend and storage
 
@@ -165,7 +172,7 @@ Queue classification applies only to people already in a queue zone. Seated clas
 | [#3](https://github.com/the-robotronics-club/MQM/pull/3) | Merged | Authenticated API, Redis current state, Influx history, readiness checks, and API tests. |
 | [#4](https://github.com/the-robotronics-club/MQM/pull/4) | Merged | Read-only Streamlit dashboard, API client, current metrics, trend chart, and dashboard tests. |
 | [#5](https://github.com/the-robotronics-club/MQM/pull/5) | Merged | Developer workflow, quality tooling, load test, Compose validation, and implementation documentation. |
-| [#6](https://github.com/the-robotronics-club/MQM/pull/6) | Open | Queue/seated MobileNetV2 classifier integration, reviewed weights, configuration, provenance note, and focused tests. |
+| [#6](https://github.com/the-robotronics-club/MQM/pull/6) | Merged | Queue/seated MobileNetV2 classifier integration, reviewed weights, configuration, provenance note, and focused tests. |
 
 ## Local setup
 
@@ -285,7 +292,7 @@ For production, put backend storage credentials in hosting environment configura
 ## Models and training handover
 
 - models/yolov8n.pt is the standard YOLO cache. It is ignored and can be downloaded automatically by Ultralytics.
-- models/queue_classifier.pt and models/seated_classifier.pt are reviewed production checkpoints tracked by PR #6.
+- models/queue_classifier.pt and models/seated_classifier.pt are the retrained checkpoints merged in Ishan’s PR #8. The seated model drives photo/live distance grouping; the queue model remains available to the calibrated API.
 - The raw content/ training handover is ignored. It contains source photos and crop datasets not required at runtime and needs separate privacy/provenance review before publication.
 - Architecture, label mapping, hashes, and safe-load verification are in [docs/reviews/2026-09-04-attribute-classifiers.md](docs/reviews/2026-09-04-attribute-classifiers.md).
 
@@ -332,6 +339,9 @@ docs/                   Handover records, model reviews, implementation notes
 ```
 
 ## Deployment and current model evaluation
+
+See [the finalized photo/live pipeline](docs/PIPELINE.md) for the selected distance
+queue method, image 419 results, and full-dataset limitations.
 
 See [deployment instructions](docs/DEPLOYMENT.md) for the container setup and
 [October model evaluation](docs/reviews/2026-10-21-retrained-models.md) for measured

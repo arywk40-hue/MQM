@@ -141,11 +141,23 @@ def render_upload() -> None:
     if result is None:
         return
     st.subheader(f"Analysis: {result['name']}")
-    st.metric("People detected", result["headcount"])
-    if result.get("sitting") is not None:
-        sitting, standing = st.columns(2)
-        sitting.metric("Sitting estimate", result["sitting"])
-        standing.metric("Standing estimate", result["standing"])
+    with st.container(horizontal=True):
+        st.metric("People detected", result["headcount"], border=True)
+        if result.get("sitting") is not None:
+            st.metric("Queue estimate", result["queue_count"], border=True)
+            st.metric("Sitting estimate", result["sitting"], border=True)
+            st.metric("Other standing", result["standing_other_count"], border=True)
+    if result.get("scene") is not None:
+        from inference.annotations import LEGEND
+
+        st.caption(LEGEND)
+        st.caption("Distance-based queue estimate. Nearby groups can be mistaken for a queue.")
+        reassigned = result["scene"].get("rescued_count", 0)
+        if reassigned:
+            st.caption(
+                f"Queue grouping reassigned {reassigned} uncertain sitting predictions "
+                "to the queue."
+            )
     if result.get("posture_error"):
         st.warning(result["posture_error"])
     st.write(
@@ -156,13 +168,15 @@ def render_upload() -> None:
     metrics = result["metrics"]
     if metrics is not None:
         queue, seats, occupancy = st.columns(3)
-        queue.metric("Queue estimate", metrics["queue_count"])
+        queue.metric("Queue inside saved layout", metrics["queue_count"])
         seats.metric("Seats occupied", f"{metrics['seats_occupied']}/{metrics['seats_total']}")
         occupancy.metric("Occupancy estimate", f"{metrics['seat_occupancy_pct']:.1f}%")
         st.write(f"Crowd level using the saved sample thresholds: **{metrics['crowd_level']}**.")
     else:
-        st.info("Queue, seating, and crowd estimates need a calibrated mess layout for this view.")
-    st.image(result["image"], caption="Detected people", width="stretch")
+        st.info(
+            "Seat occupancy and calibrated crowd levels need a saved mess layout for this view."
+        )
+    st.image(result["image"], caption="Predicted queue and posture categories", width="stretch")
     st.download_button(
         "Download annotated image", result["image"], "people-detected.png", "image/png"
     )

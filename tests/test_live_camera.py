@@ -6,7 +6,9 @@ from types import SimpleNamespace
 import av
 import numpy as np
 
-from dashboard.live_camera import LiveDetector, PosturePrediction
+from dashboard.live_camera import LiveDetector
+from inference.posture import PosturePrediction
+from inference.scene import summarize_scene
 
 
 def frame():
@@ -25,8 +27,8 @@ def test_live_detection_throttles_and_preserves_video_timing(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "inference.model", SimpleNamespace(detect_people=detect))
     monkeypatch.setattr(
-        "dashboard.live_camera.classify_postures",
-        lambda image, detections: [PosturePrediction("Sitting", 0.91)],
+        "dashboard.live_camera.analyze_scene",
+        lambda image, detections: summarize_scene(detections, [PosturePrediction("Sitting", 0.91)]),
     )
     monkeypatch.setattr("dashboard.live_camera.time.monotonic", lambda: 10.0)
     processor = LiveDetector()
@@ -75,13 +77,14 @@ def test_posture_failure_keeps_people_count(monkeypatch):
     def fail_posture(image, detections):
         raise RuntimeError("unavailable")
 
-    monkeypatch.setattr("dashboard.live_camera.classify_postures", fail_posture)
+    monkeypatch.setattr("dashboard.live_camera.analyze_scene", fail_posture)
     processor = LiveDetector()
     processor.recv(frame())
     state = processor.snapshot()
     assert state["headcount"] == 1
-    assert state["sitting"] == 0
-    assert state["standing"] == 0
+    assert state["sitting"] is None
+    assert state["standing"] is None
+    assert state["queue_count"] is None
     assert state["posture_error"]
 
 
