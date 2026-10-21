@@ -15,7 +15,13 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
 
-from inference.model import PersonDetector
+from inference.model import (
+    DEFAULT_CONFIDENCE_THRESHOLD,
+    DEFAULT_IMAGE_SIZE,
+    DEFAULT_IOU_THRESHOLD,
+    DEFAULT_MODEL_WEIGHTS,
+    PersonDetector,
+)
 from inference.posture import classify_postures
 
 
@@ -28,9 +34,11 @@ def main() -> None:
     parser.add_argument("--images", type=Path, required=True)
     parser.add_argument("--labels", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("data/outputs/real-images"))
-    parser.add_argument("--confidence", type=float, default=0.25)
-    parser.add_argument("--image-size", type=int, default=1280)
-    parser.add_argument("--weights", default="yolov8n.pt")
+    parser.add_argument("--confidence", type=float, default=DEFAULT_CONFIDENCE_THRESHOLD)
+    parser.add_argument("--image-size", type=int, default=DEFAULT_IMAGE_SIZE)
+    parser.add_argument("--iou", type=float, default=DEFAULT_IOU_THRESHOLD)
+    parser.add_argument("--weights", default=DEFAULT_MODEL_WEIGHTS)
+    parser.add_argument("--adaptive-confidence", action="store_true")
     args = parser.parse_args()
     try:
         from pillow_heif import register_heif_opener
@@ -42,7 +50,11 @@ def main() -> None:
 
     torch.set_num_threads(4)
     detector = PersonDetector(
-        weights_path=args.weights, confidence_threshold=args.confidence, image_size=args.image_size
+        weights_path=args.weights,
+        confidence_threshold=args.confidence,
+        image_size=args.image_size,
+        iou_threshold=args.iou,
+        adaptive_confidence=args.adaptive_confidence,
     )
     labels = json.loads(args.labels.read_text())["records"]
     args.output.mkdir(parents=True, exist_ok=True)
@@ -62,6 +74,13 @@ def main() -> None:
                 raise ValueError("Filename must be directly inside image directory")
             with Image.open(path) as source:
                 image = ImageOps.exif_transpose(source).convert("RGB")
+            rotation = label.get("rotation_degrees_ccw", 0)
+            if rotation not in (0, 90, 180, 270):
+                raise ValueError("rotation_degrees_ccw must be 0, 90, 180, or 270")
+            if rotation:
+                image = image.rotate(rotation, expand=True)
+            row["rotation_degrees_ccw"] = rotation
+            row["exclude_from_model_selection"] = label.get("exclude_from_model_selection", False)
             frame = np.asarray(image)[:, :, ::-1].copy()
             detections = detector.detect_people(frame)
             postures = classify_postures(frame, detections)
@@ -102,6 +121,11 @@ def main() -> None:
         "annotation": "Image-level sitting/standing counts; no queue ground truth",
         "confidence": args.confidence,
         "image_size": args.image_size,
+        "iou": args.iou,
+        "adaptive_confidence": args.adaptive_confidence,
+        "crowd_confidence": detector.crowd_confidence_threshold,
+        "crowd_min_people": detector.crowd_min_people,
+        "labels_sha256": hashlib.sha256(args.labels.read_bytes()).hexdigest(),
         "detector": args.weights,
         "skipped": sum(r["status"] != "ok" for r in rows),
         "checkpoint_sha256": {
@@ -109,11 +133,16 @@ def main() -> None:
             for p in Path("models").glob("*classifier.pt")
         },
     }
-    for cohort in ("all", "exact_unflagged"):
+    for cohort in ("all", "all_usable", "exact_unflagged"):
         selected = [
             r
             for r in rows
-            if r["status"] == "ok" and (cohort == "all" or (r["exact"] and not r["needs_review"]))
+            if r["status"] == "ok"
+            and (
+                cohort == "all"
+                or (cohort == "all_usable" and not r["exclude_from_model_selection"])
+                or (cohort == "exact_unflagged" and r["exact"] and not r["needs_review"])
+            )
         ]
         summary[cohort] = {
             "images": len(selected),

@@ -39,7 +39,8 @@ accuracy. Start with at least 4 GB RAM and measure latency on the actual host.
 ```bash
 python -m pip install -r requirements-eval.txt
 python -m tools.evaluation.real_images \
-  --images /path/to/local/photos --labels /path/to/dataset_labels.json
+  --images /path/to/local/photos --labels /path/to/dataset_labels.json \
+  --adaptive-confidence
 ```
 
 Reports are written under ignored `data/outputs/real-images/`. HEIC input is
@@ -51,3 +52,8 @@ estimate and validate on a separate held-out capture session before operational 
 This configuration has been parsed locally. The image has not been built here:
 Docker Desktop's daemon was unavailable. A public deployment still requires the
 hosting target and credentials.
+
+For fixed-cutoff comparisons, omit `--adaptive-confidence`. Runtime uses the crowd
+guard by default; `MODEL_ADAPTIVE_CONFIDENCE=false` disables it. The default 0.25
+camera-zone floor continues to apply to calibrated API metrics until camera-specific
+validation supports changing it.

@@ -99,3 +99,19 @@ def test_photo_posture_failure_keeps_detection_count(monkeypatch):
     assert result["headcount"] == 1
     assert result["sitting"] is None and result["standing"] is None
     assert result["posture_error"]
+
+
+def test_rotation_is_applied_before_detector_and_geometry(monkeypatch):
+    shapes = []
+
+    def detect(frame):
+        shapes.append(frame.shape)
+        return []
+
+    monkeypatch.setitem(sys.modules, "inference.model", SimpleNamespace(detect_people=detect))
+    result = analyze_photo(photo_bytes(size=(80, 60)), rotation_degrees_ccw=90)
+    assert shapes == [(80, 60, 3)]
+    assert (result["width"], result["height"]) == (60, 80)
+    assert Image.open(BytesIO(result["image"])).size == (60, 80)
+    with pytest.raises(ValueError, match="rotation"):
+        decode_photo(photo_bytes(), rotation_degrees_ccw=45)

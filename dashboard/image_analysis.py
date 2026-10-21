@@ -11,7 +11,9 @@ MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_IMAGE_PIXELS = 20_000_000
 
 
-def decode_photo(data: bytes) -> Image.Image:
+def decode_photo(data: bytes, rotation_degrees_ccw: int = 0) -> Image.Image:
+    if rotation_degrees_ccw not in (0, 90, 180, 270):
+        raise ValueError("Choose a rotation of 0, 90, 180, or 270 degrees.")
     if not data or len(data) > MAX_IMAGE_BYTES:
         raise ValueError("Choose a JPEG or PNG image smaller than 10 MB.")
     if not (data.startswith(b"\xff\xd8\xff") or data.startswith(b"\x89PNG\r\n\x1a\n")):
@@ -22,7 +24,10 @@ def decode_photo(data: bytes) -> Image.Image:
                 raise ValueError("Only JPEG and PNG images are supported.")
             if source.width * source.height > MAX_IMAGE_PIXELS:
                 raise ValueError("Choose an image with no more than 20 million pixels.")
-            return ImageOps.exif_transpose(source).convert("RGB")
+            image = ImageOps.exif_transpose(source).convert("RGB")
+            return (
+                image.rotate(rotation_degrees_ccw, expand=True) if rotation_degrees_ccw else image
+            )
     except (
         UnidentifiedImageError,
         OSError,
@@ -34,8 +39,8 @@ def decode_photo(data: bytes) -> Image.Image:
         ) from exc
 
 
-def analyze_photo(data: bytes, camera_id: str | None = None) -> dict:
-    image = decode_photo(data)
+def analyze_photo(data: bytes, camera_id: str | None = None, rotation_degrees_ccw: int = 0) -> dict:
+    image = decode_photo(data, rotation_degrees_ccw)
     frame = np.asarray(image)[:, :, ::-1].copy()
     if camera_id:
         from inference.zones import assign_zones, load_zones

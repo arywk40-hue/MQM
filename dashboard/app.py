@@ -87,9 +87,25 @@ def render_upload() -> None:
             "Current zones and crowd thresholds are sample estimates."
         )
 
+    rotation = 0
     if image_data is not None:
+        rotation = (
+            st.segmented_control(
+                "Rotate photo until people are upright",
+                options=[0, 90, 180, 270],
+                default=0,
+                format_func=lambda value: {
+                    0: "No rotation",
+                    90: "90° left",
+                    180: "180°",
+                    270: "90° right",
+                }[value],
+                selection_mode="single",
+            )
+            or 0
+        )
         try:
-            preview = decode_photo(image_data)
+            preview = decode_photo(image_data, rotation)
         except ValueError as exc:
             st.session_state.pop("photo_result", None)
             st.error(str(exc))
@@ -97,7 +113,11 @@ def render_upload() -> None:
         st.image(preview, caption=image_name, width="stretch")
 
     analyze = st.button("Analyze image", type="primary", disabled=image_data is None)
-    selection = (hashlib.sha256(image_data).hexdigest() if image_data else None, camera_id)
+    selection = (
+        hashlib.sha256(image_data).hexdigest() if image_data else None,
+        camera_id,
+        rotation,
+    )
     if st.session_state.get("photo_selection") != selection:
         st.session_state.pop("photo_result", None)
         st.session_state["photo_selection"] = selection
@@ -106,7 +126,7 @@ def render_upload() -> None:
         st.session_state.pop("photo_result", None)
         try:
             with st.spinner("Detecting people… The first analysis may take a little longer."):
-                analyzed_result = analyze_photo(image_data, camera_id)
+                analyzed_result = analyze_photo(image_data, camera_id, rotation)
                 analyzed_result["name"] = image_name
                 st.session_state["photo_result"] = analyzed_result
         except ValueError as exc:

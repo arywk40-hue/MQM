@@ -274,7 +274,7 @@ crowd_level, zone_counts, detections_raw, detections_counted
 | INFLUX_ORG, INFLUX_BUCKET | InfluxDB write/query destination. |
 | READ_API_BASE_URL | API URL used by Streamlit. |
 | CORS_ALLOW_ORIGINS | Allowed browser origins; no wildcard default. |
-| MODEL_* | YOLO weights, confidence, IoU, and inference-size settings. |
+| MODEL_* | YOLO weights, confidence, IoU, inference size, and adaptive crowd confidence. |
 | ATTRIBUTE_CLASSIFIERS_ENABLED | Enables queue/seated crop classification. |
 | QUEUE_CLASSIFIER_WEIGHTS, SEATED_CLASSIFIER_WEIGHTS | Reviewed paths under models/. |
 | QUEUE_ESTIMATOR | `production` (default), `geometric`, `membership`, or `occlusion`. |
@@ -336,7 +336,11 @@ docs/                   Handover records, model reviews, implementation notes
 See [deployment instructions](docs/DEPLOYMENT.md) for the container setup and
 [October model evaluation](docs/reviews/2026-10-21-retrained-models.md) for measured
 count errors on 60 real images. The updated classifiers use 128×128 crops.
-These errors remain substantial in dense scenes. Raw evaluation photos stay local.
+The [follow-up improvement study](docs/reviews/2026-10-21-count-improvements.md)
+compares fixed thresholds and a crowd guard. Photo/live detection now keeps the
+0.25 cutoff for sparse scenes and uses 0.15 when at least 25 crowd candidates exist.
+Set `MODEL_ADAPTIVE_CONFIDENCE=false` to reproduce fixed-cutoff behavior. Camera-zone
+confidence floors still apply independently. Raw evaluation photos stay local.
 
 ## Remaining deployment work
 
