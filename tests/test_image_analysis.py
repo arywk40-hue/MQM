@@ -10,6 +10,15 @@ from PIL import Image
 from dashboard.image_analysis import MAX_IMAGE_BYTES, analyze_photo, decode_photo
 
 
+@pytest.fixture(autouse=True)
+def photo_classifier_configuration(monkeypatch):
+    # Load the dependency before tests replace the detector module with a stub.
+    from inference import classifiers
+
+    monkeypatch.setenv("ATTRIBUTE_CLASSIFIERS_ENABLED", "false")
+    assert classifiers.attribute_classifiers_enabled() is False
+
+
 def photo_bytes(size=(80, 60), format="PNG"):
     output = BytesIO()
     Image.new("RGB", size, "red").save(output, format=format)
@@ -53,3 +62,40 @@ def test_no_people_is_a_successful_analysis(monkeypatch):
     result = analyze_photo(photo_bytes())
     assert result["headcount"] == 0
     assert result["detections"] == []
+
+
+def test_photo_posture_counts_share_live_classifier(monkeypatch):
+    from inference.posture import PosturePrediction
+
+    monkeypatch.setenv("ATTRIBUTE_CLASSIFIERS_ENABLED", "true")
+    monkeypatch.setitem(
+        sys.modules,
+        "inference.model",
+        SimpleNamespace(detect_people=lambda _: [{"bbox": [5, 5, 30, 50], "confidence": 0.9}]),
+    )
+    monkeypatch.setattr(
+        "inference.posture.classify_postures",
+        lambda *_: [PosturePrediction("Sitting", 0.9)],
+    )
+    result = analyze_photo(photo_bytes())
+    assert result["headcount"] == result["sitting"] == 1
+    assert result["standing"] == 0
+    assert result["metrics"] is None
+
+
+def test_photo_posture_failure_keeps_detection_count(monkeypatch):
+    monkeypatch.setenv("ATTRIBUTE_CLASSIFIERS_ENABLED", "true")
+    monkeypatch.setitem(
+        sys.modules,
+        "inference.model",
+        SimpleNamespace(detect_people=lambda _: [{"bbox": [5, 5, 30, 50], "confidence": 0.9}]),
+    )
+
+    def fail(*_):
+        raise RuntimeError("checkpoint unavailable")
+
+    monkeypatch.setattr("inference.posture.classify_postures", fail)
+    result = analyze_photo(photo_bytes())
+    assert result["headcount"] == 1
+    assert result["sitting"] is None and result["standing"] is None
+    assert result["posture_error"]

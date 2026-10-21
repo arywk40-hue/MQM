@@ -122,6 +122,12 @@ def render_upload() -> None:
         return
     st.subheader(f"Analysis: {result['name']}")
     st.metric("People detected", result["headcount"])
+    if result.get("sitting") is not None:
+        sitting, standing = st.columns(2)
+        sitting.metric("Sitting estimate", result["sitting"])
+        standing.metric("Standing estimate", result["standing"])
+    if result.get("posture_error"):
+        st.warning(result["posture_error"])
     st.write(
         f"Detected {result['headcount']} people in this "
         f"{result['width']} × {result['height']} image. "

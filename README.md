@@ -15,7 +15,7 @@ or otherwise non-redistributable test photos are never committed. Queue and
 seating estimates are only meaningful when the image matches the saved camera
 viewpoint and resolution; otherwise use the person count alone.
 
-For arbitrary photos, only person detection is reported. Enable **Use saved mess
+For arbitrary photos, person detection and optional sitting/standing estimates are reported. Enable **Use saved mess
 layout** only for the same viewpoint and resolution as a configured camera to
 obtain queue, seating, and crowd estimates. The dashboard intentionally has no
 public built-in photo sample; place photos you are allowed to use in the ignored
@@ -330,6 +330,13 @@ tests/                  Unit, API, dashboard, pipeline, and live-stack tests
 tools/                  Load test, zone drawing, evaluation utilities
 docs/                   Handover records, model reviews, implementation notes
 ```
+
+## Deployment and current model evaluation
+
+See [deployment instructions](docs/DEPLOYMENT.md) for the container setup and
+[October model evaluation](docs/reviews/2026-10-21-retrained-models.md) for measured
+count errors on 60 real images. The updated classifiers use 128×128 crops.
+These errors remain substantial in dense scenes. Raw evaluation photos stay local.
 
 ## Remaining deployment work
 

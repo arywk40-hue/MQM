@@ -47,9 +47,25 @@ def analyze_photo(data: bytes, camera_id: str | None = None) -> dict:
     from inference.model import detect_people
 
     detections = detect_people(frame)
+    from inference.classifiers import attribute_classifiers_enabled
+
+    postures = []
+    posture_error = None
+    posture_available = False
+    if attribute_classifiers_enabled():
+        from inference.posture import classify_postures
+
+        try:
+            postures = classify_postures(frame, detections)
+            posture_available = True
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("Photo posture classification failed")
+            posture_error = "Posture classification is unavailable; person counting continues."
     metrics = None
     if camera_id:
-        from inference.classifiers import attribute_classifiers_enabled, classify_people
+        from inference.classifiers import classify_people
         from inference.metrics import metrics_from_assignments
 
         assignments = assign_zones(detections, config, frame_size=image.size)
@@ -68,13 +84,17 @@ def analyze_photo(data: bytes, camera_id: str | None = None) -> dict:
     for index, detection in enumerate(detections, start=1):
         x1, y1, x2, y2 = detection["bbox"]
         drawing.rectangle((x1, y1, x2, y2), outline="#16a34a", width=3)
-        drawing.text(
-            (x1 + 3, y1 + 3), str(index), fill="white", stroke_width=2, stroke_fill="black"
-        )
+        label = str(index)
+        if postures:
+            label += f" {postures[index - 1].label}"
+        drawing.text((x1 + 3, y1 + 3), label, fill="white", stroke_width=2, stroke_fill="black")
     output = BytesIO()
     image.save(output, format="PNG")
     return {
         "headcount": len(detections),
+        "sitting": sum(p.label == "Sitting" for p in postures) if posture_available else None,
+        "standing": sum(p.label == "Standing" for p in postures) if posture_available else None,
+        "posture_error": posture_error,
         "detections": detections,
         "metrics": metrics,
         "image": output.getvalue(),

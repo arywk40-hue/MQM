@@ -16,6 +16,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
+from PIL import Image
 from torchvision.models import mobilenet_v2
 
 from .model import resolve_weights
@@ -23,7 +24,7 @@ from .zones import ZoneAssignment
 
 QUEUE_WEIGHTS = "queue_classifier.pt"
 SEATED_WEIGHTS = "seated_classifier.pt"
-INPUT_SIZE = 224
+INPUT_SIZE = 128
 _IMAGENET_MEAN = torch.tensor((0.485, 0.456, 0.406)).view(3, 1, 1)
 _IMAGENET_STD = torch.tensor((0.229, 0.224, 0.225)).view(3, 1, 1)
 
@@ -73,8 +74,11 @@ def _crop_tensor(image: np.ndarray, bbox: list[float]) -> torch.Tensor:
     if x2 <= x1 or y2 <= y1:
         raise ValueError(f"invalid person crop bounds: {bbox}")
 
-    crop = cv2.resize(image[y1:y2, x1:x2], (INPUT_SIZE, INPUT_SIZE), interpolation=cv2.INTER_AREA)
-    rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+    # Match the retraining notebook's PIL Resize (bilinear), RGB, normalization.
+    crop = cv2.cvtColor(image[y1:y2, x1:x2], cv2.COLOR_BGR2RGB)
+    rgb = np.array(
+        Image.fromarray(crop).resize((INPUT_SIZE, INPUT_SIZE), Image.Resampling.BILINEAR)
+    )
     tensor = torch.from_numpy(rgb).permute(2, 0, 1).float().div(255.0)
     return (tensor - _IMAGENET_MEAN) / _IMAGENET_STD
 

@@ -5,50 +5,16 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass
 from typing import Any
 
 import av
 import cv2
-import numpy as np
 import streamlit as st
 from streamlit_webrtc import WebRtcMode, webrtc_streamer
 
+from inference.posture import PosturePrediction, classify_postures  # noqa: F401
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class PosturePrediction:
-    label: str
-    confidence: float
-
-
-def classify_postures(
-    image: np.ndarray, detections: list[dict[str, Any]]
-) -> list[PosturePrediction]:
-    """Classify each detected person crop as sitting or standing."""
-    if not detections:
-        return []
-
-    from inference.classifiers import classify_people
-    from inference.zones import ZoneAssignment, reference_point
-
-    assignments = [
-        ZoneAssignment(
-            bbox=detection["bbox"],
-            confidence=float(detection.get("confidence", 0.0)),
-            point=reference_point(detection["bbox"]),
-        )
-        for detection in detections
-    ]
-    attributes = classify_people(image, assignments)
-    return [
-        PosturePrediction(
-            label="Sitting" if attribute.is_seated else "Standing",
-            confidence=attribute.seated_confidence,
-        )
-        for attribute in attributes
-    ]
 
 
 class LiveDetector:
