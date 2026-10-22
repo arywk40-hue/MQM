@@ -33,20 +33,28 @@ independent real-storage smoke check above passed. Ruff and MyPy passed.
 Checkpoint weights were not trained or changed. Physical RPi capture remains
 untested because the camera is not mounted.
 
-## Hosting configuration
+## Free hosting status (October 22)
 
-`compose.snapshot.yml` provides API, dashboard, private Redis, and persistent
-InfluxDB on one host. `render.yaml` provides the analogous Render Blueprint.
-The Blueprint passed Render's published JSON Schema validation. The signed-in
-Render dashboard found the file on `codex/04-integration-quality`, but showed
-**Payment Information Required** because the account has no payment details for
-the selected paid API/history services. No paid service creation or public
-deployment was submitted. The card-entry step remains for the account owner.
-Public hosting and its recurring resource charge must be verified in Render;
-preparing or pushing this configuration does not itself mean the service is live.
-No raw supplied photos, labels, or credentials are part of the deployment commit.
+The default `render.yaml` and `render.free.yaml` create only two Free web
+services. The earlier paid configuration is archived as `render.paid.yaml` and
+was not deployed. No card was added. The API uses frozen FP32 ONNX models and
+SQLite; the dashboard reads the API over its public HTTPS URL. No model training
+or dataset-specific threshold changes are part of this deployment.
 
-The local Linux container build started but is still downloading dependencies
-on this connection; the native integration check is not a completed container
-image validation. Production URLs and a remote smoke check must be recorded
-after deployment before describing the public system as working.
+The free API and dashboard resources were created in Render. The first API
+build failed during the Ultralytics import because desktop OpenCV required
+`libxcb.so.1` in the slim exporter image. `Dockerfile.free-api` now removes the
+desktop OpenCV distribution and installs only headless OpenCV before importing
+Ultralytics. The runtime already uses headless OpenCV.
+
+The fix still requires a successful Render build, readiness check, and remote
+snapshot/status/history/dashboard validation before public deployment can be
+called working. Free instances sleep when idle, share the workspace's included
+hours, and lose SQLite history when their ephemeral filesystem resets. Physical
+RPi capture remains untested. No raw supplied photos, labels, or credentials are
+part of the deployment commits.
+
+The latest software suite passed 154 tests with one opt-in live-stack test
+skipped. Ruff and MyPy passed before this Docker-only build fix. Local model
+exports preserved both source checkpoint hashes. Cloud inference parity and
+memory use still require remote verification; the Mac is not hosting inference.
