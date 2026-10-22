@@ -24,6 +24,8 @@ The API returned 35 people, 20 queued, 15 sitting, and zero other standing.
 The reading was checked in both current status and persisted history using its
 new timestamp. Streamlit AppTest then fetched that same live API and displayed
 the same four counts. The running Streamlit health endpoint also returned 200.
+After uploads stopped, Redis expiry was checked: the camera returned offline
+with no current metrics, rather than continuing to show the previous count.
 These are integration checks; they do not improve the known count errors on 419.
 
 146 software tests passed; one separate opt-in live-stack test skipped. The
@@ -35,6 +37,11 @@ untested because the camera is not mounted.
 
 `compose.snapshot.yml` provides API, dashboard, private Redis, and persistent
 InfluxDB on one host. `render.yaml` provides the analogous Render Blueprint.
+The Blueprint passed Render's published JSON Schema validation. The signed-in
+Render dashboard found the file on `codex/04-integration-quality`, but showed
+**Payment Information Required** because the account has no payment details for
+the selected paid API/history services. No paid service creation or public
+deployment was submitted. The card-entry step remains for the account owner.
 Public hosting and its recurring resource charge must be verified in Render;
 preparing or pushing this configuration does not itself mean the service is live.
 No raw supplied photos, labels, or credentials are part of the deployment commit.
