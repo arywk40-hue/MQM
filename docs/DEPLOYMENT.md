@@ -2,7 +2,7 @@
 
 ## Free-only Render demo
 
-Use `render.free.yaml`, not the paid `render.yaml`, for a zero-cost snapshot demo.
+The default `render.yaml` and explicit `render.free.yaml` both define the free-only demo. The earlier paid alternative is archived as `render.paid.yaml` and is not deployed.
 It defines two Free web services: a low-memory ONNX API and the existing live
 Streamlit dashboard. There is no paid database or disk. The API stores recent
 readings in local SQLite and expires latest state after 120 seconds; history
@@ -60,7 +60,7 @@ memory, not added to the history database.
 
 ### Render
 
-`render.yaml` is a reviewable Blueprint: a 2 GB API, free live dashboard,
+`render.paid.yaml` is the archived paid Blueprint: a 2 GB API, free live dashboard,
 internal-only free Key Value cache, and private 512 MB InfluxDB with a 1 GB disk.
 **This includes recurring paid resources; review the current Render cost before
 deploying.** The free dashboard can sleep, so opening it can require a cold start.
@@ -68,7 +68,7 @@ The API and dashboard use separate HTTPS `onrender.com` URLs. API and history
 service memory must be monitored under actual capture load.
 
 In Render, create a new Blueprint using this repository and branch
-`codex/04-integration-quality`; keep the Blueprint path `render.yaml`.
+`codex/04-integration-quality`; the archived paid path is `render.paid.yaml`. The current authorization is free-only: do not deploy that paid alternative.
 Generated camera/database secrets are stored in Render environment variables.
 The dashboard receives the API's private hostname only. No database secret is
 passed to the dashboard. Auto-deploy is disabled for the API/dashboard so future
