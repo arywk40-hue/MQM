@@ -191,6 +191,10 @@ def api_base_url() -> str:
     except (FileNotFoundError, KeyError):
         secret_value = None
     value = str(secret_value or os.environ.get("READ_API_BASE_URL", "")).strip()
+    if not value and os.environ.get("READ_API_HOST"):
+        host = os.environ["READ_API_HOST"]
+        port = int(os.environ.get("READ_API_PORT", "10000"))
+        value = f"http://{host}:{port}"
     if not value:
         raise RuntimeError(
             "READ_API_BASE_URL is not configured. Set it in .env or Streamlit secrets."
@@ -215,6 +219,21 @@ def render_camera(base_url: str, camera_id: str, status: dict) -> None:
         return
 
     metrics = status["metrics"]
+    if metrics.get("scene_method") == "distance":
+        with st.container(horizontal=True):
+            st.metric("People detected", metrics["headcount"], border=True)
+            st.metric("Queue estimate", metrics["queue_count"], border=True)
+            st.metric("Sitting estimate", metrics["sitting"], border=True)
+            st.metric("Other standing", metrics["standing_other_count"], border=True)
+        st.caption(f"Last update: {metrics['timestamp']}")
+        st.caption("Snapshot estimates. Queue grouping can confuse nearby groups with queues.")
+    else:
+        render_calibrated_metrics(metrics)
+
+    render_history(base_url, camera_id)
+
+
+def render_calibrated_metrics(metrics: dict) -> None:
     level = str(metrics["crowd_level"])
     colour = CROWD_COLOURS.get(level, "#64748b")
     st.markdown(
@@ -250,6 +269,8 @@ def render_camera(base_url: str, camera_id: str, status: dict) -> None:
                 f"Model: {metrics.get('queue_model_version', 'unknown')}"
             )
 
+
+def render_history(base_url: str, camera_id: str) -> None:
     try:
         points = cached_history(base_url, camera_id)
     except DashboardAPIError as exc:
@@ -276,7 +297,7 @@ def main() -> None:
     mode = st.segmented_control(
         "Mode",
         ["Upload image", "Phone camera", "Live cameras"],
-        default="Upload image",
+        default=os.environ.get("DASHBOARD_DEFAULT_MODE", "Upload image"),
         key="dashboard_mode",
     )
     if mode == "Phone camera":

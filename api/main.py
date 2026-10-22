@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings = get_settings()  # fail fast on missing credentials or invalid camera IDs
+    if settings.frame_metrics_mode == "distance" and settings.queue_estimator != "production":
+        raise ValueError("FRAME_METRICS_MODE=distance requires QUEUE_ESTIMATOR=production")
     if settings.queue_estimator != "production":
         from research.calibration import load_calibration
         from research.config import load_research_config

@@ -106,6 +106,47 @@ def test_dashboard_surfaces_read_api_failure(monkeypatch):
     assert "Read API request failed" in app.error[0].value
 
 
+def test_hosted_default_view_shows_snapshot_counts_without_occupancy(monkeypatch):
+    monkeypatch.setenv("DASHBOARD_DEFAULT_MODE", "Live cameras")
+    monkeypatch.setenv("READ_API_BASE_URL", "http://snapshot-api")
+    metrics = {
+        "camera_id": "mess_main",
+        "timestamp": "2026-10-22T12:00:00Z",
+        "scene_method": "distance",
+        "headcount": 39,
+        "queue_count": 25,
+        "sitting": 13,
+        "standing_other_count": 1,
+        "seats_total": None,
+        "seats_occupied": None,
+        "seat_occupancy_pct": None,
+    }
+
+    def get(url, timeout):
+        if url.endswith("/status"):
+            return Response({"cameras": {"mess_main": {"online": True, "metrics": metrics}}})
+        return Response({"points": []})
+
+    monkeypatch.setattr(requests, "get", get)
+    app = AppTest.from_file(APP).run(timeout=20)
+    assert not app.exception
+    assert [(m.label, m.value) for m in app.metric] == [
+        ("People detected", "39"),
+        ("Queue estimate", "25"),
+        ("Sitting estimate", "13"),
+        ("Other standing", "1"),
+    ]
+
+
+def test_render_dashboard_uses_private_api_host(monkeypatch):
+    from dashboard.app import api_base_url
+
+    monkeypatch.delenv("READ_API_BASE_URL", raising=False)
+    monkeypatch.setenv("READ_API_HOST", "api.internal")
+    monkeypatch.setenv("READ_API_PORT", "10000")
+    assert api_base_url() == "http://api.internal:10000"
+
+
 def test_photo_results_show_distance_queue_and_color_legend(monkeypatch):
     from io import BytesIO
 

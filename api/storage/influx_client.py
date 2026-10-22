@@ -34,9 +34,6 @@ def write_metrics(camera_id: str, metrics: dict, timestamp: datetime | None = No
         .tag("camera_id", camera_id)
         .field("headcount", int(metrics["headcount"]))
         .field("queue_count", int(metrics["queue_count"]))
-        .field("seats_occupied", int(metrics["seats_occupied"]))
-        .field("seats_total", int(metrics["seats_total"]))
-        .field("seat_occupancy_pct", float(metrics["seat_occupancy_pct"]))
         .field("crowd_level", str(metrics["crowd_level"]))
         .field("detections_raw", int(metrics["detections_raw"]))
         .field("detections_counted", int(metrics["detections_counted"]))
@@ -44,6 +41,12 @@ def write_metrics(camera_id: str, metrics: dict, timestamp: datetime | None = No
         .time(timestamp, WritePrecision.NS)
     )
     for name in (
+        "seats_occupied",
+        "seats_total",
+        "seat_occupancy_pct",
+        "sitting",
+        "standing_other_count",
+        "scene_method",
         "queue_visible",
         "queue_hidden_estimate",
         "queue_ci_low",
@@ -74,7 +77,7 @@ from(bucket: {json.dumps(settings.influx_bucket)})
       "headcount", "queue_count", "seats_occupied", "seats_total",
       "seat_occupancy_pct", "crowd_level", "queue_visible",
       "queue_hidden_estimate", "queue_ci_low", "queue_ci_high",
-      "queue_method", "queue_model_version"
+      "queue_method", "queue_model_version", "sitting", "standing_other_count", "scene_method"
   ]))
   |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
   |> sort(columns: ["_time"])
@@ -88,12 +91,15 @@ from(bucket: {json.dumps(settings.influx_bucket)})
                 "timestamp": record.get_time(),
                 "headcount": int(values["headcount"]),
                 "queue_count": int(values["queue_count"]),
-                "seats_occupied": int(values["seats_occupied"]),
-                "seats_total": int(values["seats_total"]),
-                "seat_occupancy_pct": float(values["seat_occupancy_pct"]),
+                "seats_occupied": values.get("seats_occupied"),
+                "seats_total": values.get("seats_total"),
+                "seat_occupancy_pct": values.get("seat_occupancy_pct"),
                 "crowd_level": str(values["crowd_level"]),
             }
             for name in (
+                "sitting",
+                "standing_other_count",
+                "scene_method",
                 "queue_visible",
                 "queue_hidden_estimate",
                 "queue_ci_low",

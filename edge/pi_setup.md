@@ -60,6 +60,24 @@ export CAMERA_ID="mess_main"
 python3 capture.py
 ```
 
+For hosted deployment set `SERVER_URL` to the API's HTTPS URL, not the dashboard
+URL. The server should use `FRAME_METRICS_MODE=distance` before the mounted
+camera zones are calibrated. The uploader captures 1280x720 every 10 seconds by
+default, supports `rpicam-still` and `libcamera-still`, and permits up to 120
+seconds for an inference response. Override resolution with `IMAGE_WIDTH` and
+`IMAGE_HEIGHT`; calibrated mode must use the saved zone resolution.
+
+Without camera hardware, test the same uploader with a JPEG:
+
+```bash
+python3 capture.py --image snapshot.jpg --once
+```
+
+It exits nonzero on upload failure and prints the acknowledged headcount and
+timestamp on success. The continuous loop retries on the next capture interval.
+The dashboard must be in **Live cameras** mode; uploaded-photo analysis does not
+update live camera history.
+
 ## 7. Run on Boot (Systemd Service)
 
 To ensure the script runs automatically when the Pi boots up and restarts on failure, create a systemd service.

@@ -38,6 +38,15 @@ def _positive_int(name: str, default: int) -> int:
     return value
 
 
+def _influx_url() -> str:
+    """Render supplies the private service hostname separately from its URL."""
+    configured = os.environ.get("INFLUX_URL", "").strip()
+    if configured:
+        return _required("INFLUX_URL")
+    host = os.environ.get("INFLUX_HOST", "").strip()
+    return f"http://{host}:8086" if host else _required("INFLUX_URL")
+
+
 def _choice(name: str, default: str, choices: set[str]) -> str:
     value = os.environ.get(name, default).strip().lower()
     if value not in choices:
@@ -87,13 +96,14 @@ class Settings:
     max_upload_bytes: int
     cors_allow_origins: tuple[str, ...]
     queue_estimator: str
+    frame_metrics_mode: str
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings(
         redis_url=_required("REDIS_URL"),
-        influx_url=_required("INFLUX_URL"),
+        influx_url=_influx_url(),
         influx_token=_required("INFLUX_TOKEN"),
         influx_org=_required("INFLUX_ORG"),
         influx_bucket=_required("INFLUX_BUCKET"),
@@ -108,6 +118,7 @@ def get_settings() -> Settings:
             "production",
             {"production", "geometric", "membership", "occlusion"},
         ),
+        frame_metrics_mode=_choice("FRAME_METRICS_MODE", "calibrated", {"calibrated", "distance"}),
     )
 
 

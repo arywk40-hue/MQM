@@ -12,7 +12,7 @@ COPY dashboard ./dashboard
 COPY inference ./inference
 COPY research ./research
 COPY config ./config
-COPY models ./models
+COPY models/seated_classifier.pt models/queue_classifier.pt ./models/
 # Bake the standard detector into the image; no first-request download.
 RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
 RUN useradd --uid 10001 --create-home app && chown -R app:app /app
