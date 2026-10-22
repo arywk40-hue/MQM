@@ -1,5 +1,35 @@
 # Deployment
 
+## Free-only Render demo
+
+Use `render.free.yaml`, not the paid `render.yaml`, for a zero-cost snapshot demo.
+It defines two Free web services: a low-memory ONNX API and the existing live
+Streamlit dashboard. There is no paid database or disk. The API stores recent
+readings in local SQLite and expires latest state after 120 seconds; history
+retains up to 24 hours while that instance is running. **History resets on
+restart, redeploy, or sleep.** This is a demo deployment, not archival storage.
+
+The API uses FP32 exports of the original YOLOv8n and seated MobileNetV2
+checkpoints, with the existing 1280 rectangular preprocessing, confidence guard,
+posture preprocessing, and distance queue rule. No training or label-based
+threshold search is part of export. The runtime excludes PyTorch; the separate
+build stage needs PyTorch to export the models. `Dockerfile.free-dashboard`
+contains only dashboard dependencies and starts in snapshot-only Live cameras.
+
+Create a Render Blueprint from branch `codex/04-integration-quality`, setting
+**Blueprint Path to `render.free.yaml`**. Verify both plans show Free. The
+`READ_API_BASE_URL` prompt takes the new API's public HTTPS URL; Free API services
+cannot receive private-network traffic. Correct the dashboard environment if
+Render assigns a different service URL. Use the API's generated camera secret
+only on the RPi; the dashboard does not receive it.
+
+Free services sleep on idle and share the workspace's monthly free instance
+hours with other free services. Wake the dashboard/API before the demo and allow
+for a cold start. The RPi uploader's default read timeout is 180 seconds. See
+[Render's free-tier limits](https://render.com/docs/free) for the current quota
+and sleep behavior. If free resources are exhausted, stop and resolve within
+the free tier; do not select a paid upgrade under this deployment authorization.
+
 ## RPi snapshot to live dashboard
 
 The target flow is `RPi JPEG -> POST /ingest/mess_main -> YOLO/posture/distance
@@ -57,7 +87,7 @@ python3 edge/capture.py
 
 The sender prefers `rpicam-still`, falls back to `libcamera-still`, and captures
 1280x720 by default. `IMAGE_WIDTH`, `IMAGE_HEIGHT`, `CAPTURE_INTERVAL_SECONDS`
-(default 10), and `UPLOAD_TIMEOUT_SECONDS` (default 120) are configurable.
+(default 10), and `UPLOAD_TIMEOUT_SECONDS` (default 180) are configurable.
 For calibrated mode the resolution must match its saved camera zones.
 
 Test the exact upload path from a laptop before connecting the Pi:

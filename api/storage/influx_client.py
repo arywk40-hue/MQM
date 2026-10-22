@@ -28,6 +28,11 @@ def get_influx_client() -> InfluxDBClient:
 def write_metrics(camera_id: str, metrics: dict, timestamp: datetime | None = None) -> None:
     """Synchronously persist one full reading, raising on any write failure."""
     settings = get_settings()
+    if settings.storage_backend == "sqlite":
+        from api.storage.sqlite_client import save
+
+        save(camera_id, metrics)
+        return
     timestamp = timestamp or datetime.now(UTC)
     point = (
         Point(MEASUREMENT)
@@ -67,6 +72,10 @@ def write_metrics(camera_id: str, metrics: dict, timestamp: datetime | None = No
 def query_history(camera_id: str, minutes: int = 60) -> list[dict]:
     """Return a camera's readings oldest-first over a bounded lookback."""
     settings = get_settings()
+    if settings.storage_backend == "sqlite":
+        from api.storage.sqlite_client import history
+
+        return history(camera_id, minutes)
     quoted_camera_id = json.dumps(camera_id)
     query = f"""
 from(bucket: {json.dumps(settings.influx_bucket)})
@@ -115,6 +124,10 @@ from(bucket: {json.dumps(settings.influx_bucket)})
 
 
 def check_influx() -> bool:
+    if get_settings().storage_backend == "sqlite":
+        from api.storage.sqlite_client import check
+
+        return check()
     return get_influx_client().health().status == "pass"
 
 

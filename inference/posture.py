@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,6 +21,10 @@ def classify_postures(
     """Classify each detected person crop as sitting or standing."""
     if not detections:
         return []
+    if os.environ.get("INFERENCE_BACKEND", "torch") == "onnx":
+        from inference.onnx_runtime import get_onnx_models
+
+        return get_onnx_models().classify(image, detections)
 
     from inference.classifiers import get_seated_classifier
     from inference.zones import ZoneAssignment, reference_point

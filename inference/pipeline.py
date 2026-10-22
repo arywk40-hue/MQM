@@ -54,9 +54,14 @@ def process_frame(
         raise ValueError("Distance snapshots require QUEUE_ESTIMATOR=production")
     config = load_zones(camera_id, DEFAULT_CONFIG_PATH)
     if detector is None:
-        from .model import detect_people
+        if os.environ.get("INFERENCE_BACKEND", "torch") == "onnx":
+            from .onnx_runtime import get_onnx_models
 
-        detector = detect_people
+            detector = get_onnx_models().detect_people
+        else:
+            from .model import detect_people
+
+            detector = detect_people
     detections = detector(image)
     if mode == "distance":
         from .posture import classify_postures

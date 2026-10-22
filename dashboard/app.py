@@ -294,12 +294,17 @@ def render_history(base_url: str, camera_id: str) -> None:
 def main() -> None:
     st.set_page_config(page_title="Mess Queue", page_icon="🍽️", layout="wide")
     st.title("Mess Congestion")
-    mode = st.segmented_control(
-        "Mode",
-        ["Upload image", "Phone camera", "Live cameras"],
-        default=os.environ.get("DASHBOARD_DEFAULT_MODE", "Upload image"),
-        key="dashboard_mode",
-    )
+    snapshot_only = os.environ.get("DASHBOARD_SNAPSHOT_ONLY", "false").lower() == "true"
+    mode: str | None
+    if snapshot_only:
+        mode = "Live cameras"
+    else:
+        mode = st.segmented_control(
+            "Mode",
+            ["Upload image", "Phone camera", "Live cameras"],
+            default=os.environ.get("DASHBOARD_DEFAULT_MODE", "Upload image"),
+            key="dashboard_mode",
+        )
     if mode == "Phone camera":
         from dashboard.live_camera import render_live_camera
 
@@ -309,6 +314,10 @@ def main() -> None:
         render_upload()
         return
     st.caption("Live camera estimates. The dashboard is read-only and refreshes every 8 seconds.")
+    if snapshot_only:
+        st.caption(
+            "Free demo hosting: services may sleep; recent history resets on server restart."
+        )
     st_autorefresh(interval=8_000, key="mess-status-refresh")
 
     try:

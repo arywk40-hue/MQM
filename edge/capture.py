@@ -56,7 +56,7 @@ def send_snapshot(image: bytes, server_url: str, camera_id: str, key: str) -> di
         f"{server_url.rstrip('/')}/ingest/{quote(camera_id, safe='')}",
         files={"file": ("snapshot.jpg", image, "image/jpeg")},
         headers={"X-Camera-Key": key},
-        timeout=(10, positive_number("UPLOAD_TIMEOUT_SECONDS", 120)),
+        timeout=(10, positive_number("UPLOAD_TIMEOUT_SECONDS", 180)),
     )
     response.raise_for_status()
     body = response.json()

@@ -97,16 +97,19 @@ class Settings:
     cors_allow_origins: tuple[str, ...]
     queue_estimator: str
     frame_metrics_mode: str
+    storage_backend: str
+    inference_backend: str
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    backend = _choice("STORAGE_BACKEND", "external", {"external", "sqlite"})
     return Settings(
-        redis_url=_required("REDIS_URL"),
-        influx_url=_influx_url(),
-        influx_token=_required("INFLUX_TOKEN"),
-        influx_org=_required("INFLUX_ORG"),
-        influx_bucket=_required("INFLUX_BUCKET"),
+        redis_url=_required("REDIS_URL") if backend == "external" else "",
+        influx_url=_influx_url() if backend == "external" else "",
+        influx_token=_required("INFLUX_TOKEN") if backend == "external" else "",
+        influx_org=_required("INFLUX_ORG") if backend == "external" else "",
+        influx_bucket=_required("INFLUX_BUCKET") if backend == "external" else "",
         camera_api_key=_required("CAMERA_API_KEY"),
         known_cameras=configured_camera_ids(),
         latest_ttl_seconds=_positive_int("LATEST_TTL_SECONDS", 30),
@@ -119,6 +122,8 @@ def get_settings() -> Settings:
             {"production", "geometric", "membership", "occlusion"},
         ),
         frame_metrics_mode=_choice("FRAME_METRICS_MODE", "calibrated", {"calibrated", "distance"}),
+        storage_backend=backend,
+        inference_backend=_choice("INFERENCE_BACKEND", "torch", {"torch", "onnx"}),
     )
 
 

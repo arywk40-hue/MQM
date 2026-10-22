@@ -63,7 +63,7 @@ python3 capture.py
 For hosted deployment set `SERVER_URL` to the API's HTTPS URL, not the dashboard
 URL. The server should use `FRAME_METRICS_MODE=distance` before the mounted
 camera zones are calibrated. The uploader captures 1280x720 every 10 seconds by
-default, supports `rpicam-still` and `libcamera-still`, and permits up to 120
+default, supports `rpicam-still` and `libcamera-still`, and permits up to 180
 seconds for an inference response. Override resolution with `IMAGE_WIDTH` and
 `IMAGE_HEIGHT`; calibrated mode must use the saved zone resolution.
 

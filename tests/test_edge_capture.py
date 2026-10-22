@@ -11,7 +11,7 @@ def test_snapshot_uploader_uses_authenticated_jpeg_and_cold_start_timeout(monkey
         assert url == "https://api.example/ingest/mess_main"
         assert kwargs["headers"] == {"X-Camera-Key": "secret"}
         assert kwargs["files"]["file"][2] == "image/jpeg"
-        assert kwargs["timeout"] == (10, 120)
+        assert kwargs["timeout"] == (10, 180)
         return SimpleNamespace(
             raise_for_status=lambda: None,
             json=lambda: {"status": "ok", "metrics": {"headcount": 4}},
