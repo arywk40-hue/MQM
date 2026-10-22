@@ -33,7 +33,8 @@ the free tier; do not select a paid upgrade under this deployment authorization.
 ## RPi snapshot to live dashboard
 
 The target flow is `RPi JPEG -> POST /ingest/mess_main -> YOLO/posture/distance
-counts -> InfluxDB history + Redis latest -> dashboard Live cameras`.
+counts -> SQLite recent readings -> dashboard Live cameras` on the free setup.
+The optional external-storage deployment uses InfluxDB history and Redis latest.
 The RPi only captures/uploads; inference runs on the server. The dashboard
 refreshes every eight seconds while open; a stopped camera goes offline after
 the latest-reading TTL instead of continuing to show a stale live count.
@@ -105,9 +106,10 @@ not prove inference or persistence. Open the dashboard's Live cameras view and
 verify that the new timestamp/headcount appears. Physical RPi capture is a
 separate final hardware check.
 
-The API and dashboard share one container image and the same model checkpoints.
-`compose.deploy.yml` runs them as separate processes with restart policies and
-health checks. No raw training/evaluation photos are copied into the image.
+The free Render API and dashboard use separate images; only the API contains
+model exports. The optional `compose.deploy.yml` deployment uses a shared
+image with separate API/dashboard processes, restart policies, and health
+checks. No raw training/evaluation photos are copied into these images.
 
 ## Single host with Docker Compose
 

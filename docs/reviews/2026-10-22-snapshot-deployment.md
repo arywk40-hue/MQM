@@ -47,10 +47,20 @@ build failed during the Ultralytics import because desktop OpenCV required
 desktop OpenCV distribution and installs only headless OpenCV before importing
 Ultralytics. The runtime already uses headless OpenCV.
 
-The fix still requires a successful Render build, readiness check, and remote
-snapshot/status/history/dashboard validation before public deployment can be
-called working. Free instances sleep when idle, share the workspace's included
-hours, and lose SQLite history when their ephemeral filesystem resets. Physical
+Commit `9c40c71` built and deployed successfully on Render in 2m39s (deploy
+`dep-dbctnm6q1p3s73d9iqj0`). The public API `/ready` returned HTTP 200 with
+`inference_backend=onnx`, `storage_backend=sqlite`, and `sqlite=true`. The
+public dashboard health endpoint returned HTTP 200 and its actual UI loaded
+Mess Main with the expected offline message before any fresh uploads.
+Unauthenticated ingestion returned HTTP 401, as required.
+
+- API: https://mqm-free-snapshot-api.onrender.com
+- Dashboard: https://mqm-free-snapshot-dashboard.onrender.com
+
+Authenticated remote snapshot/count/status/history/dashboard validation remains
+pending permission to access the existing Render camera secret. Startup and
+health success do not prove completed image inference. Free instances sleep
+when idle, share the workspace's included hours, and lose SQLite history when their ephemeral filesystem resets. Physical
 RPi capture remains untested. No raw supplied photos, labels, or credentials are
 part of the deployment commits.
 
