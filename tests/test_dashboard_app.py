@@ -21,6 +21,8 @@ class Response:
 
 def run_app(monkeypatch, base_url: str, get):
     monkeypatch.setenv("READ_API_BASE_URL", base_url)
+    monkeypatch.setenv("DASHBOARD_DEFAULT_MODE", "Live cameras")
+    monkeypatch.setenv("DASHBOARD_SNAPSHOT_ONLY", "false")
     monkeypatch.setattr(requests, "get", get)
     app = AppTest.from_file(APP).run(timeout=20)
     return app.segmented_control[0].set_value("Live cameras").run(timeout=20)
@@ -31,12 +33,13 @@ def test_upload_mode_does_not_require_api(monkeypatch):
         raise AssertionError("Photo upload must not request live camera status")
 
     monkeypatch.setattr(requests, "get", fail)
+    monkeypatch.setenv("DASHBOARD_DEFAULT_MODE", "Upload image")
+    monkeypatch.setenv("DASHBOARD_SNAPSHOT_ONLY", "false")
     app = AppTest.from_file(APP).run(timeout=20)
     assert not app.exception
     assert len(app.get("file_uploader")) == 1
     assert len(app.selectbox) == 1
-    assert app.button[0].label == "Analyze image"
-    assert app.button[0].disabled
+    assert next(b for b in app.button if b.label == "Analyze image").disabled
     assert not app.error
 
 
@@ -49,8 +52,9 @@ def test_dashboard_renders_offline_camera(monkeypatch):
 
     app = run_app(monkeypatch, "http://offline-api", get)
     assert not app.exception
-    assert [element.value for element in app.title] == ["Mess Congestion"]
-    assert [element.value for element in app.subheader] == ["Mess Main"]
+    assert "MQM" in app.title[0].value
+    assert "North Dining Hall" in app.subheader[0].value
+    assert not app.metric
     assert "Camera offline" in app.error[0].value
 
 
@@ -94,7 +98,7 @@ def test_dashboard_renders_metrics_and_history_chart(monkeypatch):
         ("Occupied", "12.5%"),
     ]
     assert len(app.get("plotly_chart")) == 1
-    assert "AMBER" in app.markdown[0].value
+    assert any("Moderate Crowd" in element.value for element in app.markdown)
 
 
 def test_dashboard_surfaces_read_api_failure(monkeypatch):
@@ -109,6 +113,7 @@ def test_dashboard_surfaces_read_api_failure(monkeypatch):
 def test_hosted_default_view_shows_snapshot_counts_without_occupancy(monkeypatch):
     monkeypatch.setenv("DASHBOARD_DEFAULT_MODE", "Live cameras")
     monkeypatch.setenv("READ_API_BASE_URL", "http://snapshot-api")
+    monkeypatch.setenv("DASHBOARD_SNAPSHOT_ONLY", "true")
     metrics = {
         "camera_id": "mess_main",
         "timestamp": "2026-10-22T12:00:00Z",
@@ -152,6 +157,8 @@ def test_photo_results_show_distance_queue_and_color_legend(monkeypatch):
 
     from PIL import Image
 
+    monkeypatch.setenv("DASHBOARD_DEFAULT_MODE", "Upload image")
+    monkeypatch.setenv("DASHBOARD_SNAPSHOT_ONLY", "false")
     output = BytesIO()
     Image.new("RGB", (100, 80)).save(output, format="PNG")
     app = AppTest.from_file(APP).run(timeout=20)
@@ -178,3 +185,56 @@ def test_photo_results_show_distance_queue_and_color_legend(monkeypatch):
         ("Other standing", "1"),
     ]
     assert any("Blue Q" in caption.value for caption in app.caption)
+
+
+def test_hosted_comparison_marks_offline_and_ignores_stale_counts(monkeypatch):
+    monkeypatch.setenv("DASHBOARD_SNAPSHOT_ONLY", "true")
+    monkeypatch.setenv("DASHBOARD_DEFAULT_MODE", "All messes comparison")
+    monkeypatch.setenv("READ_API_BASE_URL", "http://comparison-api")
+    monkeypatch.setattr(
+        requests,
+        "get",
+        lambda *a, **kw: Response(
+            {
+                "cameras": {
+                    "mess_main": {
+                        "online": False,
+                        "metrics": {"headcount": 999, "queue_count": 500},
+                    }
+                }
+            }
+        ),
+    )
+    app = AppTest.from_file(APP).run(timeout=20)
+    assert not app.exception
+    assert not app.metric
+    assert len(app.warning) == 3
+    assert list(app.segmented_control[0].options) == ["Live cameras", "All messes comparison"]
+    next(b for b in app.button if b.key == "select_mess_btn_south_mess").click().run()
+    assert not app.exception
+    assert app.segmented_control[0].value == "Live cameras"
+    assert app.segmented_control[1].value == "south_mess"
+    assert "Camera offline" in app.error[0].value
+
+
+def test_demo_profile_selects_assigned_mess(monkeypatch):
+    monkeypatch.setenv("DASHBOARD_SNAPSHOT_ONLY", "true")
+    monkeypatch.setenv("DASHBOARD_DEFAULT_MODE", "Live cameras")
+    monkeypatch.setenv("READ_API_BASE_URL", "http://demo-profile-api")
+    monkeypatch.setattr(requests, "get", lambda *a, **kw: Response({"cameras": {}}))
+    app = AppTest.from_file(APP).run(timeout=20)
+    next(b for b in app.button if b.key == "demo_btn_2024EE205").click().run()
+    assert not app.exception
+    assert app.segmented_control[1].value == "south_mess"
+    assert "South Dining Hall" in app.subheader[0].value
+
+
+def test_unknown_student_is_not_authenticated(monkeypatch):
+    from dashboard.student_auth import login_student
+
+    state = {}
+    monkeypatch.setattr("dashboard.student_auth.st.session_state", state)
+    ok, _ = login_student("UNKNOWN", "9999")
+    assert not ok
+    assert state["student_profile"] is None
+    assert not state["is_authenticated"]
