@@ -57,14 +57,30 @@ Unauthenticated ingestion returned HTTP 401, as required.
 - API: https://mqm-free-snapshot-api.onrender.com
 - Dashboard: https://mqm-free-snapshot-dashboard.onrender.com
 
-Authenticated remote snapshot/count/status/history/dashboard validation remains
-pending permission to access the existing Render camera secret. Startup and
-health success do not prove completed image inference. Free instances sleep
-when idle, share the workspace's included hours, and lose SQLite history when their ephemeral filesystem resets. Physical
-RPi capture remains untested. No raw supplied photos, labels, or credentials are
+After the owner approved using the existing camera key, authenticated remote
+smoke checks passed for a synthetic blank JPEG and Ultralytics' public bus JPEG.
+The blank returned zero in every category at `2026-10-22T09:55:21.019330Z`.
+The public photo returned four people (four queue, zero sitting, zero other
+standing) at `2026-10-22T09:55:51.012273Z`; the upload and readbacks took 10.43
+seconds. Both new timestamps and all category counts matched the current-status
+and history endpoints. The actual hosted dashboard showed the public photo's
+four counts, timestamp, and history plot. These prove cloud inference and data
+flow, not queue/posture accuracy on a labeled cafeteria scene. The distance
+rule can confuse nearby groups with queues.
+
+The exact `edge/capture.py --image ... --once` uploader also acknowledged four
+people at `2026-10-22T09:58:45.512385Z`, and the hosted dashboard displayed
+that new timestamp. The Pi integration commands, private key setup, one-shot
+check, and optional systemd startup are documented in `edge/pi_setup.md`. Only the existing camera
+key was accessed; no full environment export was performed.
+
+Free instances sleep when idle, share the workspace's included hours, and lose
+SQLite history when their ephemeral filesystem resets. Physical RPi capture
+remains untested. No raw supplied photos, labels, or credentials are
 part of the deployment commits.
 
 The latest software suite passed 154 tests with one opt-in live-stack test
 skipped. Ruff and MyPy passed before this Docker-only build fix. Local model
-exports preserved both source checkpoint hashes. Cloud inference parity and
-memory use still require remote verification; the Mac is not hosting inference.
+exports preserved both source checkpoint hashes. Full 60-image export parity and
+peak memory under a dense cafeteria frame remain unmeasured. The Mac is not
+hosting inference.
